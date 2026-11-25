@@ -61,6 +61,7 @@ function normalize(s) {
     const t = s.tests.find(x => x.id === d.id);
     if (!t) { s.tests.push(structuredClone(d)); continue; }          // รายการมาตรฐานใหม่
     if (d.bySex && t.bySex === undefined) t.bySex = structuredClone(d.bySex);
+    t.aliases = [...new Set([...(t.aliases || []), ...d.aliases])];      // รับคำเรียกใหม่จากเวอร์ชันถัดไป (เช่น คำภาษาไทย) โดยไม่ทิ้งคำที่ผู้ใช้เพิ่มเอง
     t.kind = d.kind;
     if (d.th && t.th === undefined) t.th = d.th;
   }
@@ -809,16 +810,25 @@ async function getOcrWorker() {
   if (!window.Tesseract) await loadScript('vendor/tesseract/tesseract.min.js');
   if (!ocrWorker) {
     const u = p => new URL(p, location.href).href;
-    ocrWorker = await Tesseract.createWorker('eng', 1, {
+    ocrWorker = await Tesseract.createWorker(['eng', 'tha'], 1, {        // อ่านทั้งอังกฤษและไทย (โมเดลอยู่ใน vendor/tesseract/lang)
       workerPath: u('vendor/tesseract/worker.min.js'), corePath: u('vendor/tesseract/'), langPath: u('vendor/tesseract/lang'),
       logger: m => ocrProgress(m),
     });
   }
   return ocrWorker;
 }
-async function ocrCanvas(canvas) { const { data } = await (await getOcrWorker()).recognize(canvas); return data.text || ''; }
-/** อ่านแบบเร็วบนรูปย่อ ใช้หาทิศของตัวหนังสือในหน้าครอบตัด */
-async function quickOcr(canvas) { const { data } = await (await getOcrWorker()).recognize(canvas); return { text: data.text || '', conf: data.confidence || 0 }; }
+let ocrLangs = 'eng+tha';
+/** สลับชุดภาษาของตัวอ่าน (ใช้ worker ตัวเดียว ประหยัดหน่วยความจำ) */
+async function ocrWith(langs) {
+  const w = await getOcrWorker();
+  if (ocrLangs !== langs) { await w.reinitialize(langs.split('+'), 1); ocrLangs = langs; }
+  return w;
+}
+/** อ่านจริง: อังกฤษ + ไทย */
+async function ocrCanvas(canvas) { const { data } = await (await ocrWith('eng+tha')).recognize(canvas); return data.text || ''; }
+/** อ่านแบบเร็วบนรูปย่อเพื่อหาทิศของรูป — ใช้อังกฤษอย่างเดียว: โมเดลไทย "อ่านออก" แม้รูปตะแคงหรือกลับหัว (ได้อักษรไทยมั่ว ๆ ด้วยความมั่นใจสูง)
+    ทำให้ตัดสินทิศผิด ส่วนตัวเลขและหน่วย (mg/dL, %) มีในใบแล็บทุกภาษาและอ่านออกเฉพาะเมื่อรูปตั้งตรง */
+async function quickOcr(canvas) { const { data } = await (await ocrWith('eng')).recognize(canvas); return { text: data.text || '', conf: data.confidence || 0 }; }
 /** รับไฟล์จากปุ่มถ่ายรูป: PDF ที่มีข้อความ → อ่านตรง ๆ; รูปหรือ PDF สแกน → ครอบตัด แล้ว OCR */
 async function handleOcrFile(file) {
   const d = ui.draft, live = () => !!S && ui.tab === 'edit' && ui.draft === d;

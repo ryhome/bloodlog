@@ -71,7 +71,31 @@ const TH_NAMES = {
   hb:'ความเข้มข้นเลือด (ฮีโมโกลบิน)', hct:'ความเข้มข้นเลือด (ฮีมาโตคริต)', wbc:'เม็ดเลือดขาว', rbc:'เม็ดเลือดแดง', plt:'เกล็ดเลือด', mcv:'ขนาดเม็ดเลือดแดง',
   tsh:'ฮอร์โมนกระตุ้นไทรอยด์', ft4:'ฮอร์โมนไทรอยด์ T4', ft3:'ฮอร์โมนไทรอยด์ T3', vitd:'วิตามินดี',
 };
+// คำภาษาไทยที่ใบผลตรวจใช้เรียกแต่ละรายการ (สำหรับอ่านใบแล็บ/ใบตรวจสุขภาพที่พิมพ์ชื่อรายการเป็นไทย)
+const TH_ALIASES = {
+  glu: ['น้ำตาลในเลือดหลังอดอาหาร', 'น้ำตาลหลังอดอาหาร', 'ระดับน้ำตาลในเลือด', 'น้ำตาลในเลือด', 'น้ำตาล'],
+  hba1c: ['น้ำตาลเฉลี่ยสะสม', 'น้ำตาลสะสม'],
+  chol: ['คอเลสเตอรอลรวม', 'โคเลสเตอรอลรวม', 'ไขมันคอเลสเตอรอล', 'ไขมันโคเลสเตอรอล', 'คอเลสเตอรอล', 'โคเลสเตอรอล', 'ไขมันรวม'],
+  tg: ['ไขมันไตรกลีเซอไรด์', 'ไตรกลีเซอไรด์'],
+  hdl: ['ไขมันชนิดดี', 'ไขมันความหนาแน่นสูง', 'ไขมันดี'],
+  ldl: ['ไขมันชนิดไม่ดี', 'ไขมันชนิดเลว', 'ไขมันความหนาแน่นต่ำ', 'ไขมันไม่ดี', 'ไขมันเลว'],
+  bun: ['ยูเรียไนโตรเจน', 'ไนโตรเจนในเลือด'],
+  cr: ['ครีเอตินิน', 'ครีเอตินีน', 'ครีอะตินิน', 'ครีอะตินีน'],
+  egfr: ['อัตราการกรองของไต', 'ค่าการกรองของไต'],
+  uric: ['กรดยูริก', 'กรดยูริค', 'ยูริก', 'ยูริค'],
+  alp: ['อัลคาไลน์ฟอสฟาเตส'],
+  alb: ['อัลบูมิน'],
+  tbil: ['บิลิรูบินรวม', 'บิลิรูบิน'],
+  hb: ['ฮีโมโกลบิน'],
+  hct: ['ฮีมาโตคริต', 'ฮีมาโทคริต'],        // ไม่ใส่ "ความเข้มข้นเลือด": ใบตรวจใช้คำนี้กับทั้ง Hb และ Hct
+  wbc: ['จำนวนเม็ดเลือดขาว', 'เม็ดเลือดขาว'],
+  rbc: ['จำนวนเม็ดเลือดแดง', 'เม็ดเลือดแดง'],
+  plt: ['จำนวนเกล็ดเลือด', 'เกล็ดเลือด'],
+  tsh: ['ฮอร์โมนกระตุ้นต่อมไทรอยด์', 'ฮอร์โมนกระตุ้นไทรอยด์'],
+  vitd: ['วิตามินดี'],
+};
 for (const t of DEFAULT_TESTS) {
+  if (TH_ALIASES[t.id]) t.aliases = t.aliases.concat(TH_ALIASES[t.id]);
   if (TH_NAMES[t.id]) t.th = TH_NAMES[t.id];
   t.kind = t.kind || 'lab';
   const r = SEX_RANGES[t.id];
@@ -82,7 +106,16 @@ const BloodParser = (() => {
   const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const NUM = /\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/;
 
+  const THAI = /[\u0E00-\u0E7F]/;
+  const MARKS = /[\u0E47-\u0E4C]/g;        // วรรณยุกต์ ไม้ไต่คู้ การันต์ — OCR ทำหายหรือสลับบ่อย จึงตัดออกทั้งสองฝั่งก่อนเทียบชื่อรายการ
+  /** ปรับข้อความก่อนแปล: เลขไทย → เลขอารบิก, สระอำที่ OCR แยกเป็นสองตัว → ตัวเดียว, ตัดอักขระล่องหน */
+  function norm(text) {
+    return String(text).normalize('NFC').replace(/[๐-๙]/g, c => '๐๑๒๓๔๕๖๗๘๙'.indexOf(c)).replace(/\u0E4D\u0E32/g, '\u0E33').replace(/[\u200B-\u200D\uFEFF\uE000-\uF8FF]/g, '');   // \uE000-\uF8FF: ฟอนต์ไทยใน PDF บางตัวใช้อักขระพิเศษแทนวรรณยุกต์
+  }
+
   function aliasRegex(alias) {
+    if (THAI.test(alias))            // ภาษาไทยไม่เว้นวรรคระหว่างคำ และ OCR มักแทรกช่องว่างกลางคำ: ไม่ใช้ขอบคำ และยอมให้มีช่องว่างระหว่างอักษร
+      return new RegExp('()(' + [...alias.replace(/\s+/g, '').replace(MARKS, '')].map(c => c === '\u0E33' ? '(?:\u0E33|\u0E4D?\\s*\u0E32)' : reEsc(c)).join('\\s*') + ')');   // สระอำ: OCR/PDF อาจให้เป็น ํ+า หรือ า เฉย ๆ
     const body = reEsc(alias.toLowerCase()).replace(/[\s-]+|\\-/g, '[\\s\\-]*');
     return new RegExp('(^|[^a-z0-9])(' + body + ')(?![a-z0-9])', 'i');
   }
@@ -96,9 +129,11 @@ const BloodParser = (() => {
         pairs.push({ id: t.id, len: a.length, re: aliasRegex(a) });
     }
     const values = {};
-    for (const raw of String(text).split(/\r?\n/)) {
-      const line = raw.replace(/[|_]/g, ' ').trim();
-      if (!line || /non[\s-]*hdl|ratio/i.test(line)) continue;
+    text = norm(text);
+    for (const raw of text.split(/\r?\n/)) {
+      const line = raw.replace(/[|_]/g, ' ').replace(MARKS, '').trim();
+      // ข้ามบรรทัดที่ชื่อคล้ายแต่ไม่ใช่รายการที่ต้องการ: อัตราส่วน, ผลตรวจปัสสาวะ, ชนิดย่อยของเม็ดเลือดขาว
+      if (!line || /non[\s-]*hdl|ratio|urine|urinalysis|\/\s*hpf|ปัสสาวะ|neutrophil|lymphocyte|monocyte|eosinophil|basophil|นิวโทรฟิล|ลิมโฟไซต์|โมโนไซต์|อีโอซิโนฟิล|เบโซฟิล/i.test(line)) continue;
       let best = null;
       for (const p of pairs) {
         const m = p.re.exec(line);
@@ -119,9 +154,14 @@ const BloodParser = (() => {
     return { values, date: parseDate(text) };
   }
 
+  const sp = w => [...w].map(reEsc).join('\\s*');                                   // ยอมให้มีช่องว่างแทรกระหว่างอักษร
+  const ab = (a, b) => sp(a) + '\\s*\\.?\\s*' + sp(b) + '\\s*\\.?';                    // ตัวย่อเดือน เช่น มี.ค. (จุดอาจหาย)
+  const TH_MONTHS = [['มกราคม', 'ม', 'ค'], ['กุมภาพันธ์', 'ก', 'พ'], ['มีนาคม', 'มี', 'ค'], ['เมษายน', 'เม', 'ย'], ['พฤษภาคม', 'พ', 'ค'], ['มิถุนายน', 'มิ', 'ย'],
+    ['กรกฎาคม', 'ก', 'ค'], ['สิงหาคม', 'ส', 'ค'], ['กันยายน', 'ก', 'ย'], ['ตุลาคม', 'ต', 'ค'], ['พฤศจิกายน', 'พ', 'ย'], ['ธันวาคม', 'ธ', 'ค']].map(([full, a, b]) => sp(full) + '|' + ab(a, b));
   const MON = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
 
   function parseDate(text) {
+    text = norm(text);
     const now = new Date();
     const fixYear = y => {
       y = +y;
@@ -139,17 +179,25 @@ const BloodParser = (() => {
       return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     };
     // ใบแล็บมีหลายวันที่ (วันเกิด, วันเก็บตัวอย่าง, วันรายงาน): เลือกวันที่ล่าสุดที่ไม่อยู่ในอนาคต
-    let m, r; const found = [];
+    let m, r;
+    // ไม่นับวันที่ที่ตามหลังคำว่า วันเกิด / DOB / Birth (ดูข้อความ 28 ตัวอักษรก่อนหน้า โดยไม่สนช่องว่างที่ OCR แทรก)
+    // ดูเฉพาะข้อความหลังตัวเลขตัวก่อนหน้า เพื่อไม่ให้ป้ายของวันที่ก่อนหน้ามาปน
+    const found = { list: [], push(v) { const before = text.slice(Math.max(0, m.index - 28), m.index).replace(/^.*\d/s, '').replace(/\s+/g, ''); if (!/เกิด|เกด|dob|d\.o\.b|birth/i.test(before)) this.list.push(v); } };
     const iso = /\b(\d{4})-(\d{1,2})-(\d{1,2})\b/g;
     while ((m = iso.exec(text))) if ((r = ok(fixYear(m[1]), +m[2], +m[3]))) found.push(r);
     const dmy = /\b(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4}|\d{2})\b/g;
     while ((m = dmy.exec(text))) if ((r = ok(fixYear(m[3]), +m[2], +m[1]))) found.push(r);
     const dMy = /\b(\d{1,2})[\s\-]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?[\s\-]*(\d{4}|\d{2})\b/gi;
     while ((m = dMy.exec(text))) if ((r = ok(fixYear(m[3]), MON[m[2].toLowerCase()], +m[1]))) found.push(r);
-    return found.length ? found.sort().pop() : null;
+    // วันที่แบบไทย: 15 มี.ค. 2569 / 15 มีนาคม พ.ศ. 2569 (ยอมให้ OCR แทรกช่องว่างหรือทำจุดหาย)
+    TH_MONTHS.forEach((names, mi) => {
+      const re = new RegExp('(?<!\\d)(\\d{1,2})\\s*(?:' + names + ')\\s*(?:พ\\s*\\.?\\s*ศ\\s*\\.?\\s*)?(\\d{4}|\\d{2})(?!\\d)', 'g');
+      while ((m = re.exec(text))) if ((r = ok(fixYear(m[2]), mi + 1, +m[1]))) found.push(r);
+    });
+    return found.list.length ? found.list.sort().pop() : null;
   }
 
-  return { parse, parseDate };
+  return { parse, parseDate, norm };
 })();
 
 if (typeof module !== 'undefined') module.exports = { DEFAULT_TESTS, BloodParser };

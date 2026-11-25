@@ -194,11 +194,14 @@ const OcrTools = (() => {
       const k = Math.min(1, 1000 / Math.max(w, h)), c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
       c.getContext('2d', { willReadFrequently: true }).drawImage(full, x, y, w, h, 0, 0, c.width, c.height);
       const { text, conf } = await quick(enhance(c));
-      const words = (text.match(/[A-Za-z]{3,}/g) || []).length, score = conf * Math.min(words, 60);
+      // หลักฐานว่ารูปตั้งตรง แบบไม่ขึ้นกับภาษา: ตัวเลขที่อ่านออกเป็นตัว ๆ, หน่วย (mg/dL, %), และคำอังกฤษ
+      const nums = (text.match(/(?<![\w.,])\d{1,3}(?:,\d{3})*(?:\.\d+)?(?![\w.,])/g) || []).length;
+      const units = (text.match(/mg\/d[lL]|g\/d[lL]|U\/L|mmol|%/g) || []).length, eng = (text.match(/[A-Za-z]{4,}/g) || []).length;
+      const words = eng + nums + 2 * units, score = conf * Math.min(words, 80);
       if (score > best.score) best = { rot, score, conf, words };
-      if (conf >= 60 && words >= 6) break;                                       // อ่านได้ดีแล้ว ไม่ต้องลองทิศที่เหลือ
+      if (conf >= 60 && (eng >= 6 || nums + units >= 10)) break;                 // อ่านได้ดีแล้ว ไม่ต้องลองทิศที่เหลือ
     }
-    return best.score > 0 && best.conf >= 35 && best.words >= 3 ? best.rot : null;   // ไม่มีทิศไหนอ่านออก: ไม่เดา
+    return best.score > 0 && best.conf >= 30 && best.words >= 4 ? best.rot : null;   // ไม่มีทิศไหนอ่านออก: ไม่เดา
   }
 
   /** เปิดหน้าครอบตัด คืน canvas ที่พร้อมส่ง OCR หรือ null ถ้ายกเลิก

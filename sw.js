@@ -1,8 +1,8 @@
 /* BloodLog service worker — แก้ VERSION ทุกครั้งที่อัปเดตไฟล์แอป */
-const VERSION = 'bloodlog-v14';
+const VERSION = 'bloodlog-v15';
 const SHELL = ['./', 'index.html', 'app.js', 'parser.js', 'sec.js', 'ocrtools.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 // ไฟล์ OCR ขนาดใหญ่: พยายามเก็บล่วงหน้า แต่ไม่ให้การติดตั้งล้มเหลวถ้าโหลดไม่ครบ
-const OCR = ['vendor/tesseract/tesseract.min.js', 'vendor/tesseract/worker.min.js', 'vendor/tesseract/lang/eng.traineddata.gz',
+const OCR = ['vendor/tesseract/tesseract.min.js', 'vendor/tesseract/worker.min.js', 'vendor/tesseract/lang/eng.traineddata.gz', 'vendor/tesseract/lang/tha.traineddata.gz',
   'vendor/pdfjs/pdf.min.js', 'vendor/pdfjs/pdf.worker.min.js'];
 
 self.addEventListener('install', e => {
