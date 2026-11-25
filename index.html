@@ -51,6 +51,7 @@ h2:first-child{margin-top:2px}
   padding:10px 14px calc(env(safe-area-inset-bottom) + 10px);box-shadow:0 -2px 8px rgba(0,0,0,.08)}
 .savebar .btn{min-height:3rem;font-size:1.05rem}
 body[data-tab=edit] nav{display:none}
+.ver{text-align:center;color:var(--mute);opacity:.45;font-size:.8rem;margin:18px 0 0}
 .quick{display:flex;gap:8px;margin-bottom:10px}
 /* ล็อก / กล่องรหัสผ่าน / ครอบตัดรูป */
 #lock{position:fixed;inset:0;z-index:30;background:var(--bg);display:flex;align-items:center;justify-content:center;overflow:auto;padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px)}
@@ -227,6 +228,7 @@ th:first-child,td:first-child{text-align:left}
 <div id="modal" hidden></div>
 <div id="toast" role="status"></div>
 <div id="print"></div>
+<script src="version.js"></script>
 <script src="parser.js"></script>
 <script src="sec.js"></script>
 <script src="ocrtools.js"></script>

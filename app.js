@@ -571,7 +571,8 @@ function viewSettings() {
     <h2>รายการวัดร่างกายและเกณฑ์</h2><div class="card">${testList('body')}</div>
     <h2>รายการตรวจเลือดและช่วงค่าอ้างอิง</h2><div class="card">${testList('lab')}
       <button class="btn block" data-act="addTest">+ เพิ่มรายการเอง</button></div>
-    <p class="mute">เกณฑ์ที่แสดงเป็นของโปรไฟล์ปัจจุบัน${prof().sex ? ` (เพศ${SEX_TH[prof().sex]})` : ''} · BloodLog ใช้เพื่อบันทึกและติดตามเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์ · OCR โดย Tesseract.js (Apache-2.0)</p>`;
+    <p class="mute">เกณฑ์ที่แสดงเป็นของโปรไฟล์ปัจจุบัน${prof().sex ? ` (เพศ${SEX_TH[prof().sex]})` : ''} · BloodLog ใช้เพื่อบันทึกและติดตามเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์ · OCR โดย Tesseract.js (Apache-2.0)</p>
+    <p class="ver">BloodLog ${esc(typeof APP_VERSION === 'string' ? APP_VERSION : '')}</p>`;
 }
 
 function viewProf() {

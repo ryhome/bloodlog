@@ -12,7 +12,8 @@ Vanilla JS ไม่มี build step ข้อมูลเก็บใน Index
 - `app.js` UI, IndexedDB, กราฟ SVG, ส่งออก PDF (ผ่าน print), สำรอง/กู้คืน JSON
 - `parser.js` รายการตรวจมาตรฐาน + ช่วงอ้างอิง + ตัวแปลงข้อความ OCR
 - `sec.js` เข้ารหัส / PIN / ลายนิ้วมือ, `ocrtools.js` ครอบตัดรูปและอ่าน PDF
-- `sw.js` service worker (แก้ `VERSION` ทุกครั้งที่อัปเดตไฟล์)
+- `version.js` เลขเวอร์ชัน (แก้ที่นี่ที่เดียวทุกครั้งที่อัปเดตไฟล์ — แสดงท้ายหน้าตั้งค่า และเป็นชื่อแคชของ service worker)
+- `sw.js` service worker
 - `vendor/tesseract/` Tesseract.js 7 + โมเดลภาษาอังกฤษและไทย, `vendor/pdfjs/` pdf.js 4.10 (legacy build)
 
 ## ข้อมูลที่เก็บ
