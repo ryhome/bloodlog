@@ -482,12 +482,13 @@ function viewReview(d) {
     ${nSus ? `<div class="card warn"><b>⚠️ มี ${nSus} ค่าที่ผิดปกติมาก</b><div class="mute">อาจอ่านจุดทศนิยมพลาด (เช่น 5.9 เป็น 59) จึงยังไม่ได้ติ๊กให้ แก้ตัวเลขให้ถูกแล้วค่านั้นจะถูกติ๊กเอง</div></div>` : ''}
     <div class="seg"><button class="btn" data-act="revAll">☑ เลือกทั้งหมด</button><button class="btn" data-act="revNone">☐ ไม่เลือกเลย</button></div>
     ${rv.date ? `<div class="card"><div class="rev"><input type="checkbox" id="revDateOn" checked aria-label="ใช้วันที่ตรวจที่อ่านได้"><span class="grow"><b>วันที่ตรวจ</b><div class="mute">อ่านจากใบผล (เดิมในฟอร์ม ${fmtDate(d.date)})</div></span><input type="date" id="revDate" value="${esc(rv.date)}" max="${today()}" aria-label="วันที่ตรวจ"></div></div>` : ''}
-    <div class="card">${rv.items.map(it => {
-      const t = testById(it.id), old = d.values[it.id];
+    ${rv.table && rv.table.labels.length > 1 ? `<div class="card"><b>ใบนี้เป็นตารางเทียบหลายปี (${rv.table.labels.map(esc).join(', ')})</b><div class="mute">นำเข้าเฉพาะคอลัมน์ผลปัจจุบัน <b>${esc(rv.table.current)}</b> · รายการที่ปีนี้ไม่ได้ตรวจจะไม่ถูกนำเข้า แม้ใบจะแสดงค่าของปีก่อน</div></div>` : ''}
+    ${[false, true].map(isBody => { const list = rv.items.filter(i => !!i.body === isBody); return !list.length ? '' : `${isBody ? '<h2>วัดร่างกาย <span class="mute" style="font-weight:400">— จะบันทึกเป็นรายการแยก วันเดียวกัน</span></h2>' : ''}<div class="card">${list.map(it => {
+      const t = testById(it.id), old = it.body ? null : d.values[it.id];
       return `<div class="rev${it.sus ? ' sus' : ''}"><input type="checkbox" data-rev="${esc(it.id)}"${it.sus ? '' : ' checked'} aria-label="นำเข้า ${esc(t.th || t.name)}">
         <span class="grow"><b>${esc(t.th || t.name)}</b><div class="mute">${esc([t.th ? t.name : '', t.unit, rangeText(t) ? 'เกณฑ์ ' + rangeText(t) : ''].filter(Boolean).join(' · '))}${old != null && old !== it.v ? ` · <b>จะแทนค่าเดิม ${fmtNum(old)}</b>` : ''}${it.sus ? ' · <b style="color:var(--hi)">ผิดปกติมาก ตรวจจุดทศนิยม</b>' : ''}</div></span>
         <input type="number" inputmode="decimal" step="any" data-revv="${esc(it.id)}" value="${it.v}" aria-label="ค่า ${esc(t.th || t.name)}"></div>`;
-    }).join('')}</div>
+    }).join('')}</div>`; }).join('')}
     ${d.ocrText ? `<details><summary>ดูข้อความดิบที่อ่านได้</summary><pre>${esc(d.ocrText)}</pre></details>` : ''}
     <div class="btns savebar"><button class="btn" data-act="revCancel">ยกเลิก</button><button class="btn primary" data-act="revApply" style="flex:2">✓ นำเข้า <span id="revN">${rv.items.length - nSus}</span> รายการ</button></div>`;
 }
@@ -524,6 +525,8 @@ function viewEdit() {
         <div><label for="fLab">โรงพยาบาล / แล็บ</label><input id="fLab" value="${esc(d.lab)}" placeholder="ไม่บังคับ"></div></div>
         <label for="fNote">บันทึกเพิ่มเติม</label><input id="fNote" value="${esc(d.note)}" placeholder="เช่น งดอาหาร 10 ชม."></div>`;
   return `<h2>${d.quick ? 'บันทึกด่วน: ' + QUICK[d.quick].label : (d.isNew ? 'เพิ่ม' : 'แก้ไข') + (body ? 'การวัดร่างกาย' : 'ผลตรวจเลือด')}</h2>${top}
+    ${d.bodyVals && Object.keys(d.bodyVals).length ? `<div class="card"><b>📏 จะบันทึกค่าร่างกายจากใบนี้ด้วย</b><div class="mute">${esc(bodyLabel({ values: d.bodyVals }, Object.keys(d.bodyVals).filter(testById)).replace(/ \+\d+$/, ' …'))} · บันทึกเป็นรายการ "วัดร่างกาย" แยกต่างหาก วันเดียวกับผลเลือด</div>
+      <button class="btn block" data-act="dropBody">ไม่บันทึกค่าร่างกาย</button></div>` : ''}
     <p class="mute" style="margin:0 2px">กรอกเฉพาะค่าที่มีในครั้งนี้ ช่องที่เว้นว่างจะไม่ถูกบันทึก (คำว่า "เดิม" สีจางคือค่าครั้งล่าสุด ไม่ใช่ค่าที่กรอก)</p>${fields}
     <div class="btns savebar"><button class="btn" data-act="cancel">ยกเลิก</button><button class="btn primary" data-act="saveRec" style="flex:2">✓ บันทึก</button></div>
     ${d.quick === 'bp' ? '<button class="btn block" data-act="saveAgain">บันทึก แล้ววัดอีกครั้ง (เพื่อหาค่าเฉลี่ย)</button>' : ''}${d.quick && !simpleActive() ? '<button class="btn block" data-act="fullForm">แสดงทุกช่อง</button>' : ''}
@@ -657,12 +660,18 @@ const actions = {
   cancel: () => { ui.tab = ui.back || 'home'; ui.draft = null; render(); },
   async saveRec(_, again) {
     readForm(); const d = ui.draft;
-    if (!Object.keys(d.values).length) return toast('ยังไม่ได้กรอกค่าใดเลย');
+    const bv = d.bodyVals && Object.keys(d.bodyVals).length ? { ...d.bodyVals } : null;
+    if (bv && ('sys' in bv) !== ('dia' in bv)) { delete bv.sys; delete bv.dia; }        // ความดันต้องมาเป็นคู่
+    const hasBody = bv && Object.keys(bv).length > 0;
+    if (!Object.keys(d.values).length && !hasBody) return toast('ยังไม่ได้กรอกค่าใดเลย');
     if (('sys' in d.values) !== ('dia' in d.values)) return toast('กรุณากรอกความดันให้ครบทั้งตัวบนและตัวล่าง');
-    const rec = { id: d.id, profileId: S.activeProfile, kind: d.kind, date: d.date, lab: d.lab, note: d.note, values: d.values };
-    if (d.time) rec.time = d.time;
-    const i = S.records.findIndex(r => r.id === d.id);
-    if (i >= 0) { rec.profileId = S.records[i].profileId; S.records[i] = rec; } else S.records.push(rec);
+    if (Object.keys(d.values).length) {
+      const rec = { id: d.id, profileId: S.activeProfile, kind: d.kind, date: d.date, lab: d.lab, note: d.note, values: d.values };
+      if (d.time) rec.time = d.time;
+      const i = S.records.findIndex(r => r.id === d.id);
+      if (i >= 0) { rec.profileId = S.records[i].profileId; S.records[i] = rec; } else S.records.push(rec);
+    }
+    if (hasBody) S.records.push({ id: uid(), profileId: S.activeProfile, kind: 'body', date: d.date, lab: '', note: d.lab ? 'จากใบผลตรวจ ' + d.lab : 'จากใบผลตรวจ', values: bv });   // ค่าร่างกายที่อ่านจากใบผลฉบับเดียวกัน
     await save();
     // ค่าที่กรอกผ่านปุ่มบันทึกด่วนจะถูกเลิกซ่อนอัตโนมัติ ไม่อย่างนั้นบันทึกแล้วจะไม่เห็นบนหน้าภาพรวม
     if (d.quick) { let ch = false; for (const id of QUICK[d.quick].ids) { const t = testById(id); if (t && t.hidden && id in d.values && !(id === 'bmi' && prof().height)) { t.hidden = false; ch = true; } } if (ch) await save(); }
@@ -678,6 +687,7 @@ const actions = {
   ocr: () => { readForm(); noLockUntil = Date.now() + 5 * 60e3; $('#ocrFile').click(); },          // เลือกรูปหรือ PDF ที่มีอยู่ในเครื่อง
   ocrCam: () => { readForm(); noLockUntil = Date.now() + 5 * 60e3; $('#ocrCam').click(); },        // เปิดกล้องถ่ายใหม่
   /* ----- หน้าตรวจค่าที่อ่านได้ก่อนนำเข้า ----- */
+  dropBody: () => { readForm(); ui.draft.bodyVals = null; render(true); },
   revAll: () => { $$('[data-rev]').forEach(c => { c.checked = true; }); revCount(); },
   revNone: () => { $$('[data-rev]').forEach(c => { c.checked = false; }); revCount(); },
   revCancel: () => { const d = ui.draft; d.review = null; d.ocrMsg = 'ยกเลิกการนำเข้า ไม่มีค่าใดถูกเปลี่ยน'; render(); },
@@ -686,7 +696,10 @@ const actions = {
     for (const c of $$('[data-rev]')) {
       if (!c.checked) continue;
       const inp = $(`[data-revv="${CSS.escape(c.dataset.rev)}"]`), v = inp && inp.value !== '' ? +inp.value : NaN;
-      if (isFinite(v)) { d.values[c.dataset.rev] = v; d.ocr.add(c.dataset.rev); n++; }
+      if (!isFinite(v)) continue;
+      const t = testById(c.dataset.rev); n++;
+      if (t && t.kind === 'body') (d.bodyVals = d.bodyVals || {})[t.id] = v;        // ค่าร่างกายจากใบเดียวกัน: เก็บไว้รอบันทึกเป็นรายการแยก
+      else { d.values[c.dataset.rev] = v; d.ocr.add(c.dataset.rev); }
     }
     const dOn = $('#revDateOn'), dv = $('#revDate'), useDate = dOn && dOn.checked && dv && /^\d{4}-\d{2}-\d{2}$/.test(dv.value) && dv.value <= today();
     if (useDate) d.date = dv.value;
@@ -836,13 +849,13 @@ async function handleOcrFile(file) {
   const status = html => { const el = $('#ocrStatus'); if (el && live()) el.innerHTML = html; };
   noLockUntil = Date.now() + 5 * 60e3;
   const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
-  let fromText = false;
+  let fromText = false, table = null;
   try {
     let text = null, canvas = null;
     if (isPdf) {
       status('กำลังเปิดไฟล์ PDF…<progress></progress>');
       const r = await OcrTools.readPdf(file, wrong => askPassword({ title: wrong ? 'รหัสผ่านไม่ถูกต้อง ลองอีกครั้ง' : 'ไฟล์ PDF นี้ตั้งรหัสผ่านไว้', sub: 'โรงพยาบาลมักใช้วันเกิดหรือเลขบัตรประชาชนเป็นรหัส (ดูในอีเมลหรือข้อความที่ส่งไฟล์มา)' }));
-      if (r.text) { text = r.text; fromText = true; } else canvas = r.canvas;
+      if (r.text) { text = r.text; fromText = true; table = r.table || null; } else canvas = r.canvas;
     } else canvas = await OcrTools.loadImage(file);
     if (text == null) {
       ocrProgress = () => {};
@@ -853,14 +866,16 @@ async function handleOcrFile(file) {
       text = await ocrCanvas(cut);
     }
     if (!live()) return;
-    const { values, date } = BloodParser.parse(text, S.tests.filter(t => t.kind === 'lab' && !t.hidden));
+    // ตารางเทียบหลายปี (จาก PDF): อ่านค่าจากคอลัมน์ผลปัจจุบันเท่านั้น ส่วนวันที่หาจากข้อความทั้งฉบับ
+    const usable = S.tests.filter(t => !t.hidden);
+    const values = BloodParser.parse(table ? table.colText : text, usable).values, date = BloodParser.parseDate(text);
     const n = Object.keys(values).length;
     readForm();                                            // เก็บสิ่งที่ผู้ใช้พิมพ์ระหว่างรอ ก่อนวาดฟอร์มใหม่
     d.ocrText = text;
     if (!n) d.ocrMsg = fromText ? 'ไม่พบรายการตรวจที่รู้จักในไฟล์ PDF นี้ ลองกรอกเอง หรือถ่ายรูปใบผลแทน' : 'ไม่พบรายการตรวจที่รู้จักในรูปนี้ ลองครอบให้พอดีตาราง หมุนให้ตรง หรือถ่ายใหม่ให้ชัดและสว่างขึ้น';
-    else d.review = { fromText, date, items: Object.entries(values).map(([id, v]) => {
+    else d.review = { fromText, date, table: table && { labels: table.labels, current: table.current }, items: Object.entries(values).map(([id, v]) => {
       const r = rng(testById(id));   // ค่าที่ห่างจากเกณฑ์เกิน 5 เท่า มักเกิดจากอ่านจุดทศนิยมหรือหลักตัวเลขพลาด (เช่น 5.9 → 59): ไม่ติ๊กให้ ต้องตรวจเอง
-      return { id, v, sus: !fromText && ((r.high != null && r.high > 0 && v > r.high * 5) || (r.low != null && r.low > 0 && v < r.low / 5)) };
+      return { id, v, body: testById(id).kind === 'body', sus: !fromText && ((r.high != null && r.high > 0 && v > r.high * 5) || (r.low != null && r.low > 0 && v < r.low / 5)) };
     }) };
   } catch (e) {
     if (e && e.cancelled) return status(esc(d.ocrMsg || OCR_IDLE));

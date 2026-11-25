@@ -339,15 +339,41 @@ const OcrTools = (() => {
       }
     }
     try {
-      let text = '';
-      for (let n = 1; n <= Math.min(doc.numPages, 12); n++) {
+      let text = '';                       // ข้อความทั้งหมดแบบเรียงบรรทัด (ใช้หาวันที่ และใช้แทนเมื่อไม่พบตารางหลายคอลัมน์)
+      const cols = new Map();              // ป้ายคอลัมน์ผล (เช่น "2026") → ข้อความเฉพาะคอลัมน์นั้น "ชื่อรายการ ค่า"
+      for (let n = 1; n <= Math.min(doc.numPages, 40); n++) {
         const page = await doc.getPage(n), tc = await page.getTextContent();
-        const items = tc.items.filter(i => i.str && i.str.trim()).map(i => ({ s: i.str, x: i.transform[4], y: i.transform[5], h: Math.abs(i.transform[3]) || i.height || 10 }));
+        const items = tc.items.filter(i => i.str && i.str.trim()).map(i => ({ s: i.str.trim(), x: i.transform[4], y: i.transform[5], w: i.width || 0, h: Math.abs(i.transform[3]) || i.height || 10 }));
         items.sort((a, b) => b.y - a.y || a.x - b.x);
-        let line = [], ly = null;
-        const flush = () => { if (line.length) text += line.sort((a, b) => a.x - b.x).map(i => i.s).join(' ') + '\n'; line = []; };
+        const lines = []; let line = [], ly = null;
+        const flush = () => { if (line.length) lines.push({ y: ly, items: line.sort((a, b) => a.x - b.x) }); line = []; };
         for (const it of items) { if (ly !== null && Math.abs(it.y - ly) > Math.max(2, it.h * 0.5)) flush(); if (!line.length) ly = it.y; line.push(it); }   // ชิ้นข้อความที่ y ใกล้กัน = บรรทัดเดียวกัน
         flush();
+        for (const l of lines) text += l.items.map(i => i.s).join(' ') + '\n';
+
+        // ตารางเทียบหลายปี: หัวตารางมีปี (2026 | 2025 | 2024) เรียงกันในบรรทัดเดียว → ค่าของแต่ละปีอยู่ใต้หัวของปีนั้น
+        // ใช้ตำแหน่งแนวนอนแยกว่าเลขไหนเป็นของปีไหน และเลขไหนเป็นค่าอ้างอิง (อยู่ขวาสุด) — ข้อความเรียงบรรทัดอย่างเดียวบอกไม่ได้
+        const heads = lines.map(l => ({ y: l.y, yrs: l.items.filter(i => /^(19|20|25)\d\d$/.test(i.s)) })).filter(h => h.yrs.length >= 1 && h.yrs.every(i => i.w < 60));
+        heads.forEach((hd, hi) => {
+          const c = hd.yrs.map(i => ({ label: i.s, cx: i.x + i.w / 2 })).sort((p, q) => p.cx - q.cx);
+          const gapL = c.length > 1 ? c[1].cx - c[0].cx : 70, gapR = c.length > 1 ? c[c.length - 1].cx - c[c.length - 2].cx : 70;
+          const left = c[0].cx - gapL / 2, right = c[c.length - 1].cx + gapR / 2;
+          const bound = c.map((k, i) => i === 0 ? left : (c[i - 1].cx + k.cx) / 2).concat(right);
+          const yEnd = hi + 1 < heads.length ? heads[hi + 1].y : -Infinity;
+          for (const l of lines) {
+            if (l.y >= hd.y - 1 || l.y <= yEnd) continue;                       // เฉพาะแถวใต้หัวตารางนี้ จนถึงหัวตารางถัดไป
+            const mid = i => i.x + i.w / 2, name = l.items.filter(i => mid(i) < left).map(i => i.s).join(' ');
+            if (!name) continue;
+            c.forEach((k, j) => {
+              const cell = l.items.filter(i => mid(i) >= bound[j] && mid(i) < bound[j + 1]).map(i => i.s).join(' ');
+              cols.set(k.label, (cols.get(k.label) || '') + name + ' ' + cell + '\n');   // ช่องว่าง = ปีนั้นไม่ได้ตรวจรายการนี้ → ได้แค่ชื่อ ไม่มีเลข
+            });
+          }
+        });
+      }
+      if (cols.size) {
+        const labels = [...cols.keys()].sort().reverse();                       // ปีล่าสุด = ผลปัจจุบัน
+        return { text, table: { labels, current: labels[0], colText: cols.get(labels[0]) } };
       }
       if (text.replace(/\s/g, '').length >= 30) return { text };
       const page = await doc.getPage(1), vp0 = page.getViewport({ scale: 1 }), vp = page.getViewport({ scale: Math.min(3, 2200 / vp0.width) });

@@ -23,6 +23,9 @@ const DEFAULT_TESTS = [
   {id:'tbil',  group:'ตับ', name:'Total Bilirubin', unit:'mg/dL', low:0.2, high:1.2, aliases:['total bilirubin','bilirubin total','bilirubin']},
   {id:'dbil',  group:'ตับ', name:'Direct Bilirubin', unit:'mg/dL', low:null, high:0.3, aliases:['direct bilirubin','bilirubin direct']},
   {id:'alb',   group:'ตับ', name:'Albumin', unit:'g/dL', low:3.5, high:5.2, aliases:['albumin']},
+  {id:'tp',    group:'ตับ', name:'Total Protein', unit:'g/dL', low:6.6, high:8.3, aliases:['total protein']},
+  {id:'glob',  group:'ตับ', name:'Globulin', unit:'g/dL', low:1.5, high:4.5, aliases:['globulin']},
+  {id:'ggt',   group:'ตับ', name:'GGT', unit:'U/L', low:null, high:55, aliases:['gamma gt','gamma-gt','gamma glutamyl','ggt']},
   // CBC
   {id:'hb',    group:'ความสมบูรณ์ของเม็ดเลือด (CBC)', name:'Hemoglobin', unit:'g/dL', low:12, high:17.5, aliases:['hemoglobin','haemoglobin','hgb','hb']},
   {id:'hct',   group:'ความสมบูรณ์ของเม็ดเลือด (CBC)', name:'Hematocrit', unit:'%', low:36, high:52, aliases:['hematocrit','haematocrit','hct']},
@@ -35,26 +38,29 @@ const DEFAULT_TESTS = [
   {id:'ft4',   group:'ไทรอยด์', name:'Free T4', unit:'ng/dL', low:0.8, high:1.8, aliases:['free t4','ft4']},
   {id:'ft3',   group:'ไทรอยด์', name:'Free T3', unit:'pg/mL', low:2.0, high:4.4, aliases:['free t3','ft3']},
   {id:'vitd',  group:'อื่น ๆ', name:'Vitamin D (25-OH)', unit:'ng/mL', low:30, high:100, aliases:['vitamin d','vit d','25-oh','25 oh']},
+  {id:'ca',    group:'อื่น ๆ', name:'Calcium', unit:'mg/dL', low:8.8, high:10.6, aliases:['calcium']},
+  {id:'psa',   group:'อื่น ๆ', name:'PSA', unit:'ng/mL', low:null, high:4, aliases:['prostate specific antigen','psa']},
 ];
 
 // รายการวัดร่างกาย (kind:'body') — บันทึกเองได้บ่อย ๆ แยกจากผลแล็บ
 const BODY_TESTS = [
-  {id:'sys',    kind:'body', group:'ความดันและชีพจร', name:'ความดันตัวบน (SYS)', unit:'mmHg', low:90, high:129, aliases:[]},
-  {id:'dia',    kind:'body', group:'ความดันและชีพจร', name:'ความดันตัวล่าง (DIA)', unit:'mmHg', low:60, high:84, aliases:[]},
-  {id:'hr',     kind:'body', group:'ความดันและชีพจร', name:'ชีพจร / อัตราการเต้นหัวใจ', unit:'ครั้ง/นาที', low:60, high:100, aliases:[]},
+  {id:'sys',    kind:'body', group:'ความดันและชีพจร', name:'ความดันตัวบน (SYS)', unit:'mmHg', low:90, high:129, aliases:['systolic','sys','ความดันโลหิตตัวบน','ความดันตัวบน']},
+  {id:'dia',    kind:'body', group:'ความดันและชีพจร', name:'ความดันตัวล่าง (DIA)', unit:'mmHg', low:60, high:84, aliases:['diastolic','dia','ความดันโลหิตตัวล่าง','ความดันตัวล่าง']},
+  {id:'hr',     kind:'body', group:'ความดันและชีพจร', name:'ชีพจร / อัตราการเต้นหัวใจ', unit:'ครั้ง/นาที', low:60, high:100, aliases:['pulse','heart rate','ชีพจร','อัตราการเต้นของหัวใจ','อัตราการเต้นหัวใจ']},
   {id:'dtx_f',  kind:'body', group:'น้ำตาลปลายนิ้ว', name:'น้ำตาลก่อนอาหาร / อดอาหาร', unit:'mg/dL', low:70, high:99, aliases:[]},
   {id:'dtx_pp', kind:'body', group:'น้ำตาลปลายนิ้ว', name:'น้ำตาลหลังอาหาร 2 ชม.', unit:'mg/dL', low:70, high:139, aliases:[]},
-  {id:'weight', kind:'body', group:'น้ำหนักและสัดส่วน', name:'น้ำหนัก', unit:'กก.', low:null, high:null, aliases:[]},
-  {id:'bmi',    kind:'body', group:'น้ำหนักและสัดส่วน', name:'BMI', unit:'กก./ม²', low:18.5, high:22.9, aliases:[]},
-  {id:'fat',    kind:'body', group:'น้ำหนักและสัดส่วน', name:'ไขมันในร่างกาย', unit:'%', low:null, high:null, aliases:[]},
-  {id:'chest',  kind:'body', group:'น้ำหนักและสัดส่วน', name:'รอบอก', unit:'ซม.', low:null, high:null, aliases:[]},
-  {id:'waist',  kind:'body', group:'น้ำหนักและสัดส่วน', name:'รอบเอว', unit:'ซม.', low:null, high:null, aliases:[]},
-  {id:'hip',    kind:'body', group:'น้ำหนักและสัดส่วน', name:'รอบสะโพก', unit:'ซม.', low:null, high:null, aliases:[]},
+  {id:'weight', kind:'body', group:'น้ำหนักและสัดส่วน', name:'น้ำหนัก', unit:'กก.', low:null, high:null, aliases:['weight','น้ำหนัก']},
+  {id:'bmi',    kind:'body', group:'น้ำหนักและสัดส่วน', name:'BMI', unit:'กก./ม²', low:18.5, high:22.9, aliases:['bmi','body mass index','ดัชนีมวลกาย','ดัชนีมวลรวมร่างกาย']},
+  {id:'fat',    kind:'body', group:'น้ำหนักและสัดส่วน', name:'ไขมันในร่างกาย', unit:'%', low:null, high:null, aliases:['body fat','ไขมันในร่างกาย']},
+  {id:'chest',  kind:'body', group:'น้ำหนักและสัดส่วน', name:'รอบอก', unit:'ซม.', low:null, high:null, aliases:['รอบอก']},
+  {id:'waist',  kind:'body', group:'น้ำหนักและสัดส่วน', name:'รอบเอว', unit:'ซม.', low:null, high:null, aliases:['waist','รอบเอว']},
+  {id:'hip',    kind:'body', group:'น้ำหนักและสัดส่วน', name:'รอบสะโพก', unit:'ซม.', low:null, high:null, aliases:['รอบสะโพก']},
 ];
 DEFAULT_TESTS.unshift(...BODY_TESTS);
 
 // ช่วงอ้างอิงที่ต่างกันตามเพศ [low, high] — ใช้เมื่อโปรไฟล์ระบุเพศ
 const SEX_RANGES = {
+  ggt:   { m:[null, 55],  f:[null, 38] },
   hb:    { m:[13, 17.5],  f:[12, 15.5] },
   hct:   { m:[39, 52],    f:[36, 46] },
   rbc:   { m:[4.5, 5.9],  f:[4.0, 5.2] },
@@ -85,6 +91,7 @@ const TH_ALIASES = {
   uric: ['กรดยูริก', 'กรดยูริค', 'ยูริก', 'ยูริค'],
   alp: ['อัลคาไลน์ฟอสฟาเตส'],
   alb: ['อัลบูมิน'],
+  ca: ['แคลเซียม'],
   tbil: ['บิลิรูบินรวม', 'บิลิรูบิน'],
   hb: ['ฮีโมโกลบิน'],
   hct: ['ฮีมาโตคริต', 'ฮีมาโทคริต'],        // ไม่ใส่ "ความเข้มข้นเลือด": ใบตรวจใช้คำนี้กับทั้ง Hb และ Hct
@@ -104,7 +111,7 @@ for (const t of DEFAULT_TESTS) {
 
 const BloodParser = (() => {
   const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const NUM = /\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/;
+  const NUM = /(?<![A-Za-z0-9.])(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)/;      // ไม่เอาเลขที่ติดกับตัวอักษร (เช่น A2A, m2)
 
   const THAI = /[\u0E00-\u0E7F]/;
   const MARKS = /[\u0E47-\u0E4C]/g;        // วรรณยุกต์ ไม้ไต่คู้ การันต์ — OCR ทำหายหรือสลับบ่อย จึงตัดออกทั้งสองฝั่งก่อนเทียบชื่อรายการ
@@ -126,26 +133,29 @@ const BloodParser = (() => {
     for (const t of tests) {
       const al = (t.aliases && t.aliases.length ? t.aliases : [t.name]).concat(t.name);
       for (const a of new Set(al.map(x => x.toLowerCase().trim()).filter(Boolean)))
-        pairs.push({ id: t.id, len: a.length, re: aliasRegex(a) });
+        pairs.push({ id: t.id, len: a.length, re: aliasRegex(a), th: THAI.test(a) });
     }
     const values = {};
     text = norm(text);
     for (const raw of text.split(/\r?\n/)) {
       const line = raw.replace(/[|_]/g, ' ').replace(MARKS, '').trim();
       // ข้ามบรรทัดที่ชื่อคล้ายแต่ไม่ใช่รายการที่ต้องการ: อัตราส่วน, ผลตรวจปัสสาวะ, ชนิดย่อยของเม็ดเลือดขาว
-      if (!line || /non[\s-]*hdl|ratio|urine|urinalysis|\/\s*hpf|ปัสสาวะ|neutrophil|lymphocyte|monocyte|eosinophil|basophil|นิวโทรฟิล|ลิมโฟไซต์|โมโนไซต์|อีโอซิโนฟิล|เบโซฟิล/i.test(line)) continue;
+      if (!line || /non[\s-]*hdl|ratio|urine|urinalysis|\/\s*hpf|ปัสสาวะ|typing|morphology|\bmchc?\b|\brdw\b|\bmpv\b|neutrophil|lymphocyte|monocyte|eosinophil|basophil|นิวโทรฟิล|ลิมโฟไซต์|โมโนไซต์|อีโอซิโนฟิล|เบโซฟิล/i.test(line)) continue;
+      // ใบตรวจไทยมักเขียน "คำอธิบายไทย (ชื่ออังกฤษ)": ชื่ออังกฤษเจาะจงกว่า จึงใช้ก่อนถ้ามี (เช่น "ค่าเฉลี่ยปริมาตรเม็ดเลือดแดง (MCV)" ต้องเป็น MCV ไม่ใช่เม็ดเลือดแดง)
       let best = null;
       for (const p of pairs) {
         const m = p.re.exec(line);
         if (!m) continue;
-        const pos = m.index + m[1].length;
-        if (!best || pos < best.pos || (pos === best.pos && p.len > best.len))
-          best = { id: p.id, pos, len: p.len, end: m.index + m[0].length };
+        const pos = m.index + m[1].length, cand = { id: p.id, pos, len: p.len, end: m.index + m[0].length, th: p.th };
+        if (!best || (best.th && !cand.th) || (best.th === cand.th && (pos < best.pos || (pos === best.pos && p.len > best.len)))) best = cand;
       }
       if (!best || best.id in values) continue;
-      const rest = line.slice(best.end).replace(/\([^)]*\)/g, ' ');
+      // ตัดข้อความในวงเล็บทิ้ง รวมถึงส่วนท้ายของวงเล็บที่ชื่อรายการอยู่ข้างใน เช่น "(BMI-kg/m 2) 26.1" → " 26.1"
+      const rest = line.slice(best.end).replace(/^[^()]*\)/, ' ').replace(/\([^)]*\)/g, ' ');
       const n = NUM.exec(rest);
       if (!n) continue;
+      // เลขตัวแรกเป็นส่วนหนึ่งของค่าอ้างอิง ไม่ใช่ผลตรวจ: เป็นช่วง "0.38 - 5.33" หรือมีเครื่องหมาย < > ≤ ≥ นำหน้า → บรรทัดนี้ไม่มีผล
+      if (/^\s*[-–—]\s*\d/.test(rest.slice(n.index + n[0].length)) || /[<>≤≥]\s*$/.test(rest.slice(0, n.index))) continue;
       const v = parseFloat(n[0].replace(/,/g, ''));
       if (!isFinite(v)) continue;
       // บางแล็บรายงานเป็นจำนวนเต็มต่อ µL (เช่น WBC 6,800, Platelet 265,000) แต่หน่วยในแอปคือ 10³/µL
