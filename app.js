@@ -30,10 +30,10 @@ const Store = {
 };
 
 let S = null;              // state
-let ui = { tab: 'home', trendTest: null, draft: null, hist: 'all', off: {} };   // off[testId] = ย้อนหลังกี่ครั้งจากค่าล่าสุด (หน้าภาพรวม)
+let ui = { tab: 'home', trendTest: null, draft: null, hist: 'all' };   // สถานะหน้าจอ (ไม่ถูกบันทึก): set = หน้าย่อยของตั้งค่า, arrange = โหมดจัดเรียงรายการ, from = มาจากหน้าไหน, wstep = ขั้นของหน้าต้อนรับ
 
 function freshState() {
-  return { v: 2, profiles: [{ id: 'p1', name: 'ฉัน', sex: '', dob: '', height: null }], activeProfile: 'p1', tests: structuredClone(DEFAULT_TESTS), records: [], font: 0, simple: false, created: today(), lastBackup: null, backupSnooze: null };
+  return { v: 2, profiles: [{ id: 'p1', name: 'ฉัน', sex: '', dob: '', height: null }], activeProfile: 'p1', tests: structuredClone(DEFAULT_TESTS), records: [], font: 0, simple: false, created: today(), lastBackup: null, backupSnooze: null, onboarded: false, openGroups: null };
 }
 /** ตรวจรูปแบบ + อัปเกรดข้อมูลจากเวอร์ชันเก่า (ใช้ทั้งตอนเปิดแอปและตอนกู้คืนไฟล์สำรอง) */
 function normalize(s) {
@@ -75,6 +75,8 @@ function normalize(s) {
   }
   s.font = [0, 1, 2].includes(s.font) ? s.font : 0;
   s.simple = !!s.simple;
+  s.onboarded = s.onboarded !== false;                 // ข้อมูลจากเวอร์ชันก่อนมีหน้าต้อนรับ = ผ่านมาแล้ว
+  s.openGroups = Array.isArray(s.openGroups) ? s.openGroups.filter(g => typeof g === 'string').slice(0, 60) : null;
   const isDate = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
   s.created = isDate(s.created) ? s.created : today();
   s.lastBackup = isDate(s.lastBackup) ? s.lastBackup : null;
@@ -171,8 +173,6 @@ function bpStatus(sys, dia) {
 const pairOf = id => id === 'sys' ? 'dia' : id === 'dia' ? 'sys' : null;
 /** มีการบันทึกความดันที่กรอกมาแค่ตัวเดียวหรือไม่ (ข้อมูลเก่า/นำเข้า) — ถ้ามีต้องยังแสดงแถวเดี่ยวไว้ ไม่อย่างนั้นค่านั้นจะมองไม่เห็น */
 const bpLone = id => myRecords().some(r => id in r.values && !('sys' in r.values && 'dia' in r.values));
-const rowLen = id => id === 'bp' ? bpSessions().length : series(id).length;
-const rowHTML = (id, anim) => id === 'bp' ? bpRow(anim) : homeRow(testById(id), anim);
 
 let toastT;
 /** act = { label, fn } → แสดงปุ่มในข้อความ (เช่น "เลิกทำ") และค้างไว้นานขึ้น */
@@ -197,106 +197,65 @@ const FONT_TH = ['ปกติ', 'ใหญ่', 'ใหญ่มาก'];
 function render(keep) {
   const y0 = window.scrollY;
   document.documentElement.dataset.font = S.font || 0;
-  document.body.dataset.tab = ui.tab;
-  document.body.dataset.simple = simpleActive() ? 1 : 0;      // หน้ากรอกข้อมูล: ซ่อนแถบเมนูล่าง แล้วใช้ที่ตรงนั้นวางปุ่มบันทึกแบบติดจอ
-  $('#profileSel').innerHTML = S.profiles.map(p => `<option value="${esc(p.id)}"${p.id === S.activeProfile ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
+  document.body.dataset.tab = ui.tab;                          // หน้ากรอกข้อมูล/หน้าต้อนรับ: ซ่อนแถบเมนูล่าง
+  document.body.dataset.simple = simpleActive() ? 1 : 0;
+  const sel = $('#profileSel');
+  sel.innerHTML = S.profiles.map(p => `<option value="${esc(p.id)}"${p.id === S.activeProfile ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
+  sel.hidden = S.profiles.length < 2 || ui.tab === 'welcome';  // มีโปรไฟล์เดียว: ไม่ต้องมีตัวเลือกให้รก
   $$('nav button').forEach(b => b.removeAttribute('aria-current'));
   const cur = $(`nav button[data-tab="${ui.tab}"]`); if (cur) cur.setAttribute('aria-current', 'page');
   $('#fab').hidden = !['home', 'history'].includes(ui.tab) || simpleActive();
   $('#sheet').hidden = true;
-  $('#view').innerHTML = ({ home: simpleActive() ? viewSimple : viewHome, history: viewHistory, trend: viewTrend, summary: viewSummary, settings: viewSettings, edit: viewEdit, test: viewTest, prof: viewProf }[ui.tab])();
+  $('#view').innerHTML = ({ home: simpleActive() ? viewSimple : viewHome, history: viewHistory, trend: viewTrend, summary: viewSummary, settings: viewSettings, edit: viewEdit, test: viewTest, prof: viewProf, welcome: viewWelcome }[ui.tab])();
   window.scrollTo(0, keep ? y0 : 0);
 }
 
 function emptyState() {
   return `<div class="empty"><img src="icons/icon-192.png" alt="" style="width:5rem;height:5rem;border-radius:24%"><h2>ยังไม่มีข้อมูล</h2>
-    <p>กดปุ่ม + เพื่อถ่ายรูปใบผลแล็บ หรือบันทึกความดัน น้ำหนัก น้ำตาล</p>
-    <button class="btn primary" data-act="new">เริ่มบันทึกครั้งแรก</button></div>${quickBar()}`;
+    <p>เริ่มจากบันทึกความดัน น้ำหนัก น้ำตาล หรือนำเข้าใบผลตรวจเลือด</p>
+    <button class="btn primary xl" data-act="new">＋ บันทึกครั้งแรก</button></div>`;
 }
 
-/** ปุ่ม ‹ › สำหรับดูค่าครั้งก่อน/ถัดไป (ใช้แทนการปัดได้) */
-const posHTML = (id, i, n) => n > 1 ? `<div class="pos"><button class="ar${i > 0 ? '' : ' dim'}" data-act="step" data-id="${esc(id)}:1" aria-label="ดูครั้งก่อนหน้า">‹</button><span>${i + 1}/${n}</span><button class="ar${i < n - 1 ? '' : ' dim'}" data-act="step" data-id="${esc(id)}:-1" aria-label="ดูครั้งถัดไป">›</button></div>` : '';
-/** แถวหนึ่งรายการบนหน้าภาพรวม — ปัดขวา = ค่าที่เก่ากว่า, ปัดซ้าย = ค่าที่ใหม่กว่า, แตะ = กราฟ */
-function homeRow(t, anim) {
-  const s = series(t.id); if (!s.length) return '';
-  const off = Math.min(ui.off[t.id] || 0, s.length - 1), i = s.length - 1 - off;
-  const cur = s[i], prev = s[i - 1], st = statusOf(t, cur.v);
-  let delta = '';
-  if (prev) { const d = cur.v - prev.v; delta = d === 0 ? '→ เท่าเดิม' : `${d > 0 ? '▲' : '▼'} ${fmtNum(Math.abs(d))}`; }
-  const pos = posHTML(t.id, i, s.length);
-  return `<div role="button" tabindex="0" class="row${off ? ' past' : ''}${anim ? ' ' + anim : ''}" data-act="trend" data-id="${esc(t.id)}" data-swipe="${esc(t.id)}"
-      aria-label="${esc(t.th || t.name)} ${fmtNum(cur.v)} ${esc(t.unit)} วันที่ ${fmtDate(cur.date)} ครั้งที่ ${i + 1} จาก ${s.length}">
-    <span class="grow"><div>${esc(t.th || t.name)}</div><div class="mute">${t.th ? esc(t.name) + ' · ' : ''}${off ? '<b>ย้อนหลัง</b> · ' : ''}${fmtDate(cur.date)}${cur.rec.time ? ' ' + esc(cur.rec.time) : ''}${rangeText(t) ? ' · เกณฑ์ ' + esc(rangeText(t)) : ''}</div></span>
-    <span class="vcol" style="text-align:right"><div class="val">${fmtNum(cur.v)} <span class="mute">${esc(t.unit)}</span></div><div class="delta">${delta}</div>${pos}</span>
-    ${chip(st)}</div>`;
-}
-/** แถวความดันแบบคู่ 135/88 — แต่ละตำแหน่งคือหนึ่ง "รอบวัด" (วัดติดกันหลายครั้งจะถูกเฉลี่ย) */
-function bpRow(anim) {
-  const s = bpSessions(); if (!s.length) return '';
-  const off = Math.min(ui.off.bp || 0, s.length - 1), i = s.length - 1 - off, cur = s[i], prev = s[i - 1];
-  const ar = d => d === 0 ? '→' : (d > 0 ? '▲' : '▼') + Math.abs(d);
-  const delta = prev ? `${ar(cur.sys - prev.sys)} / ${ar(cur.dia - prev.dia)}` : '';
-  const a7 = off ? null : bpAvg(7);
-  const pos = posHTML('bp', i, s.length);
-  return `<div role="button" tabindex="0" class="row${off ? ' past' : ''}${anim ? ' ' + anim : ''}" data-act="trend" data-id="bp" data-swipe="bp"
-      aria-label="ความดัน ${cur.sys} ทับ ${cur.dia} วันที่ ${fmtDate(cur.date)} ครั้งที่ ${i + 1} จาก ${s.length}">
-    <span class="grow"><div>ความดัน</div><div class="mute">${off ? '<b>ย้อนหลัง</b> · ' : ''}${fmtDate(cur.date)}${cur.time ? ' ' + esc(cur.time) : ''}${cur.n > 1 ? ` · เฉลี่ย ${cur.n} ครั้ง` : ''}${a7 && a7.n > 1 ? ` · เฉลี่ย 7 วัน ${a7.sys}/${a7.dia}` : ''}</div></span>
-    <span class="vcol" style="text-align:right"><div class="val">${cur.sys}/${cur.dia} <span class="mute">mmHg</span></div><div class="delta">${delta}</div>${pos}</span>
-    ${chip(bpStatus(cur.sys, cur.dia))}</div>`;
-}
-function stepRow(id, dir) {          // dir +1 = เก่ากว่า, -1 = ใหม่กว่า
-  const n = rowLen(id), cur = ui.off[id] || 0, next = Math.max(0, Math.min(n - 1, cur + dir));
-  if (next === cur) return toast(dir > 0 ? 'ไม่มีค่าที่เก่ากว่านี้แล้ว' : 'นี่คือค่าล่าสุดแล้ว');
-  ui.off[id] = next;
-  const el = $(`[data-swipe="${CSS.escape(id)}"]`), hadFocus = el === document.activeElement;
-  if (!el) return;
-  el.outerHTML = rowHTML(id, dir > 0 ? 'in-l' : 'in-r');
-  if (hadFocus) $(`[data-swipe="${CSS.escape(id)}"]`).focus();
+/** แถวบนหน้าภาพรวม: บรรทัดเดียว — ชื่อ ค่า สถานะ (รายละเอียดและประวัติอยู่ในหน้าที่เปิดเมื่อแตะ) */
+const rowBtn = (id, name, val, unit, st) => `<button class="row hrow" data-act="trend" data-id="${esc(id)}" data-row="${esc(id)}">
+    <span class="grow">${esc(name)}</span><span class="val">${val} <span class="mute">${esc(unit)}</span></span>${chip(st)}<span class="mute" aria-hidden="true">›</span></button>`;
+/** รายการที่มีข้อมูลและไม่ถูกซ่อน เรียงตามหมวด (ความดันตัวบน/ล่างรวมเป็นรายการเดียว) */
+function homeItems() {
+  const out = [], bp = bpSessions().pop();
+  for (const [g, tests] of groups()) for (const t of tests) {
+    if (t.hidden) continue;
+    if (bp && pairOf(t.id)) {
+      if (t.id === 'sys') out.push({ id: 'bp', group: g, pin: t.pin, st: bpStatus(bp.sys, bp.dia), html: rowBtn('bp', 'ความดัน', `${bp.sys}/${bp.dia}`, 'mmHg', bpStatus(bp.sys, bp.dia)) });
+      if (!bpLone(t.id)) continue;                         // มีค่าที่กรอกมาตัวเดียว: คงแถวเดี่ยวไว้ด้วย ไม่อย่างนั้นค่านั้นจะมองไม่เห็น
+    }
+    const last = series(t.id).pop(); if (!last) continue;
+    const st = statusOf(t, last.v);
+    out.push({ id: t.id, group: g, pin: t.pin, st, html: rowBtn(t.id, t.th || t.name, fmtNum(last.v), t.unit, st) });
+  }
+  return out;
 }
 
 function viewHome() {
   const recs = myRecords();
   if (!recs.length) return emptyState();
-  const hasBP = bpSessions().length > 0;
-  let abn = 0, rows = '', pinned = '';
-  for (const [g, tests] of groups()) {
-    let inner = '';
-    for (const t of tests) {
-      if (t.hidden) continue;
-      let html = '';
-      if (hasBP && pairOf(t.id)) {
-        if (t.id === 'sys') {                               // แสดงรวมเป็นแถวเดียวที่ตำแหน่งของตัวบน
-          const last = bpSessions().pop();
-          if (['low', 'high'].includes(bpStatus(last.sys, last.dia))) abn++;
-          html = bpRow();
-        }
-        if (bpLone(t.id)) html += homeRow(t);               // มีค่าที่กรอกมาตัวเดียว: คงแถวเดี่ยวไว้ด้วย
-      } else {
-        const s = series(t.id); if (!s.length) continue;
-        if (['low', 'high'].includes(statusOf(t, s[s.length - 1].v))) abn++;
-        html = homeRow(t);
-      }
-      if (t.pin) pinned += html; else inner += html;
-    }
-    if (inner) rows += `<h2>${esc(g)}</h2><div class="card">${inner}</div>`;
-  }
-  if (pinned) rows = `<h2>📌 ปักหมุด</h2><div class="card">${pinned}</div>` + rows;
-  const lastLab = myRecords('lab').pop(), p = prof(), due = backupDue();
-  const dv = derived(), dhtml = dv.length ? `<h2>ค่าที่คำนวณจากข้อมูล</h2><div class="card">${dv.map(x => x.hint ? `<p class="mute" style="margin:6px 0">${esc(x.hint)}</p>`
-    : `<div class="row"><span class="grow"><div>${esc(x.name)}</div><div class="mute">${esc(x.sub)} · ${fmtDate(x.date)}</div></span><span class="val">${fmtNum(x.v)} <span class="mute">${esc(x.unit)}</span></span>${chip(x.st)}</div>`).join('')}</div>` : '';
-  return `${due ? `<div class="card warn"><b>⚠️ ยังไม่ได้สำรองข้อมูลมา ${due} วัน</b><div class="mute">ข้อมูลอยู่ในเครื่องนี้เครื่องเดียว ถ้าเครื่องหายหรือล้างข้อมูลเบราว์เซอร์ ข้อมูลจะหายทั้งหมด</div>
-      <div class="btns" style="margin-top:8px"><button class="btn primary" data-act="export">สำรองเดี๋ยวนี้</button><button class="btn" data-act="snooze">เตือนอีกใน 7 วัน</button></div></div>` : ''}${profLine(p) ? `<p class="mute" style="margin:0 2px 10px">${esc(p.name)} · ${esc(profLine(p))}</p>` : `<p class="mute" style="margin:0 2px 10px">ยังไม่ได้ระบุเพศ/วันเกิด/ส่วนสูง — <a href="#" data-act="renProf" data-id="${esc(p.id)}">ตั้งค่าโปรไฟล์</a> เพื่อใช้เกณฑ์ตามเพศและคำนวณ BMI</p>`}
-    <div class="summary">
-      <div class="card"><b>${recs.length}</b><span class="mute">ครั้งที่บันทึก</span></div>
-      <div class="card"><b style="color:${abn ? 'var(--hi)' : 'var(--ok)'}">${abn}</b><span class="mute">ค่าล่าสุดนอกเกณฑ์</span></div>
-      <div class="card"><b style="font-size:1rem;line-height:2.25rem">${lastLab ? fmtDate(lastLab.date) : '–'}</b><span class="mute">ตรวจเลือดล่าสุด</span></div>
-    </div>
-    ${quickBar()}
-    <button class="btn block" data-act="summary" style="margin:0 0 10px">📋 ตารางสรุปย้อนหลัง (เทียบหลายครั้ง)</button>
-    <p class="mute" style="text-align:center;margin:0 0 4px">กด ‹ › (หรือปัดซ้าย-ขวา) เพื่อดูค่าครั้งก่อน · แตะที่รายการเพื่อดูกราฟ</p>${rows || '<p class="mute" style="text-align:center">รายการที่มีข้อมูลถูกซ่อนไว้ทั้งหมด — เปิดได้ในหน้าตั้งค่า</p>'}${dhtml}
-    <p class="mute">ช่วงค่าอ้างอิงเป็นค่าทั่วไป อาจต่างจากแล็บหรือเป้าหมายที่แพทย์กำหนด ใช้เพื่อติดตามเท่านั้น ไม่ใช่การวินิจฉัย</p>`;
+  const items = homeItems(), abn = items.filter(i => i.st === 'high' || i.st === 'low');
+  const pinned = items.filter(i => i.pin && !abn.includes(i)), rest = items.filter(i => !abn.includes(i) && !pinned.includes(i));
+  const lastLab = myRecords('lab').pop(), due = backupDue(), dv = derived();
+  // หมวดที่เหลือพับเก็บได้ จำสถานะเปิด/ปิดไว้; ยังไม่เคยกด = เปิดให้ถ้ารายการน้อย หรือไม่มีอะไรเด่นอยู่ข้างบน
+  const isOpen = g => Array.isArray(S.openGroups) ? S.openGroups.includes(g) : (rest.length <= 6 || (!abn.length && !pinned.length));
+  const fold = (g, title, n, inner) => `<details class="grp" data-grp="${esc(g)}"${isOpen(g) ? ' open' : ''}><summary><span>${esc(title)}</span><span class="mute">${n} รายการ</span></summary><div class="card">${inner}</div></details>`;
+  const byGroup = new Map(); for (const i of rest) { if (!byGroup.has(i.group)) byGroup.set(i.group, []); byGroup.get(i.group).push(i); }
+  return `${due ? `<div class="card warn"><b>ยังไม่ได้สำรองข้อมูลมา ${due} วัน</b>
+      <div class="btns" style="margin-top:8px"><button class="btn primary" data-act="export">สำรองเดี๋ยวนี้</button><button class="btn" data-act="snooze">เตือนอีกใน 7 วัน</button></div></div>` : ''}
+    <div class="summary one">${lastLab ? `ตรวจเลือดล่าสุด ${fmtDate(lastLab.date, true)}` : `บันทึกล่าสุด ${fmtDate(recs[recs.length - 1].date, true)}`} · ${abn.length ? `<b style="color:var(--hi)">${abn.length} ค่าที่ควรดู</b>` : '<b style="color:var(--ok)">ทุกค่าอยู่ในเกณฑ์</b>'}</div>
+    ${abn.length ? `<h2>ค่าที่นอกเกณฑ์</h2><div class="card">${abn.map(i => i.html).join('')}</div>` : ''}
+    ${pinned.length ? `<h2>ปักหมุด</h2><div class="card">${pinned.map(i => i.html).join('')}</div>` : ''}
+    ${rest.length ? `<h2>${abn.length || pinned.length ? 'ค่าอื่น ๆ' : 'ค่าล่าสุด'}</h2>` + [...byGroup].map(([g, list]) => fold(g, g, list.length, list.map(i => i.html).join(''))).join('') : ''}
+    ${!items.length ? '<p class="mute" style="text-align:center">รายการที่มีข้อมูลถูกซ่อนไว้ทั้งหมด — เปิดได้ในตั้งค่า › รายการตรวจ</p>' : ''}
+    ${dv.length ? fold('__calc', 'ค่าที่คำนวณให้', dv.filter(x => !x.hint).length, dv.map(x => x.hint ? `<p class="mute" style="margin:6px 0">${esc(x.hint)}</p>`
+      : `<div class="row"><span class="grow"><div>${esc(x.name)}</div><div class="mute">${esc(x.sub)}</div></span><span class="val">${fmtNum(x.v)} <span class="mute">${esc(x.unit)}</span></span>${chip(x.st)}</div>`).join('')) : ''}
+    <button class="btn block" data-act="summary" style="margin-top:14px">ตารางเทียบหลายครั้ง</button>`;
 }
-const quickBar = () => `<div class="quick">${Object.entries(QUICK).map(([k, q]) => `<button class="btn" data-act="quick" data-id="${k}">+ ${q.label}</button>`).join('')}</div>`;
 
 /** ค่าที่คำนวณจากข้อมูลล่าสุด (ไม่ได้เก็บลงฐานข้อมูล คำนวณใหม่ทุกครั้งที่แสดง) */
 function derived() {
@@ -429,12 +388,12 @@ function viewTrend() {
   const valid = id => (id === 'bp' && hasBP) || withData.some(t => t.id === id);
   if (!valid(ui.trendTest)) ui.trendTest = hasBP ? 'bp' : withData[0].id;
   const id = ui.trendTest, pinT = testById(id === 'bp' ? 'sys' : id);
-  const opts = k => (k === 'body' && hasBP ? `<option value="bp"${id === 'bp' ? ' selected' : ''}>ความดัน ตัวบน/ตัวล่าง (${bpSessions().length})</option>` : '')
-    + withData.filter(x => x.kind === k).map(x => `<option value="${esc(x.id)}"${x.id === id ? ' selected' : ''}>${esc(x.th ? x.th + ' — ' + x.name : x.name)} (${series(x.id).length})</option>`).join('');
-  return `${simpleActive() ? '<button class="btn block" data-act="home" style="margin:0 0 10px">‹ กลับหน้าหลัก</button>' : ''}<label for="trendSel">รายการ</label>
-    <select id="trendSel">${['body', 'lab'].map(k => opts(k) ? `<optgroup label="${KIND_TH[k]}">${opts(k)}</optgroup>` : '').join('')}</select>
+  const opts = k => (k === 'body' && hasBP ? `<option value="bp"${id === 'bp' ? ' selected' : ''}>ความดัน ตัวบน/ตัวล่าง</option>` : '')
+    + withData.filter(x => x.kind === k).map(x => `<option value="${esc(x.id)}"${x.id === id ? ' selected' : ''}>${esc(x.th ? x.th + ' — ' + x.name : x.name)}</option>`).join('');
+  return `${ui.from === 'home' || simpleActive() ? '<button class="btn" data-act="home" style="margin:0 0 10px">‹ กลับ</button>' : ''}
+    <select id="trendSel" aria-label="รายการ">${['body', 'lab'].map(k => opts(k) ? `<optgroup label="${KIND_TH[k]}">${opts(k)}</optgroup>` : '').join('')}</select>
     ${id === 'bp' ? trendBP() : trendOne(testById(id))}
-    ${simpleActive() ? '' : `<button class="btn block" data-act="pin" data-id="${esc(pinT.id)}">${pinT.pin ? '📌 เลิกปักหมุด' : '📌 ปักหมุดไว้บนสุดของหน้าภาพรวม'}</button>`}`;
+    ${simpleActive() ? '' : `<button class="btn block" data-act="pin" data-id="${esc(pinT.id)}">${pinT.pin ? 'เลิกปักหมุด' : '📌 ปักหมุดไว้บนหน้าภาพรวม'}</button>`}`;
 }
 function trendOne(t) {
   const s = series(t.id);
@@ -442,7 +401,11 @@ function trendOne(t) {
     const prev = arr[i + 1], d = prev ? p.v - prev.v : null;
     return `<tr><td>${fmtDate(p.date, true)}${p.rec.time ? ` <span class="mute">${esc(p.rec.time)}</span>` : ''}</td><td><b>${fmtNum(p.v)}</b></td><td class="mute">${d == null ? '' : d === 0 ? '→' : (d > 0 ? '▲ ' : '▼ ') + fmtNum(Math.abs(d))}</td><td>${chip(statusOf(t, p.v))}</td></tr>`;
   }).join('');
-  return `<div class="card" style="margin-top:12px"><div><b>${esc(t.th || t.name)}</b></div><div class="mute">${t.th ? esc(t.name) + ' · ' : ''}${esc(t.unit)}${rangeText(t) ? ' · เกณฑ์ ' + esc(rangeText(t)) + ' (แถบสีเขียว)' : ''}</div>${chartSVG([{ s, st: v => statusOf(t, v) }], { band: rng(t), label: t.name })}</div>
+  const last = s[s.length - 1];
+  return `<div class="card big" style="margin-top:12px"><div class="bt">${esc(t.th || t.name)}</div>
+      <div class="bv">${fmtNum(last.v)} <small>${esc(t.unit)}</small> ${chip(statusOf(t, last.v))}</div>
+      <div class="mute">ล่าสุด ${fmtDate(last.date, true)}${rangeText(t) ? ' · เกณฑ์ ' + esc(rangeText(t)) : ''}${t.th ? ' · ' + esc(t.name) : ''}</div></div>
+    <div class="card">${chartSVG([{ s, st: v => statusOf(t, v) }], { band: rng(t), label: t.name })}</div>
     <div class="card"><table><tr><th>วันที่</th><th>ค่า</th><th>เปลี่ยนแปลง</th><th></th></tr>${rows}</table></div>`;
 }
 function trendBP() {
@@ -456,7 +419,7 @@ function trendBP() {
       <p class="mute">การวัดที่ห่างกันไม่เกิน 10 นาทีในวันเดียวกันนับเป็นรอบเดียวและแสดงค่าเฉลี่ย · ค่าเฉลี่ย 7/30 วันคิดจากทุกครั้งที่วัด</p></div>`;
 }
 
-const OCR_IDLE = 'รูปและไฟล์ถูกประมวลผลในเครื่องนี้เท่านั้น ไม่ถูกส่งออกไปที่ใด';
+const OCR_IDLE = 'รูปและไฟล์ถูกอ่านในเครื่องนี้เท่านั้น';
 /** หน้าตรวจค่าที่ OCR/PDF อ่านได้: ติ๊กเลือกค่าที่จะนำเข้า แก้ตัวเลขได้ ยังไม่มีอะไรเข้าฟอร์มจนกว่าจะกด "นำเข้า" */
 function viewReview(d) {
   const rv = d.review, nSus = rv.items.filter(i => i.sus).length;
@@ -510,55 +473,93 @@ function viewEdit() {
   return `<h2>${d.quick ? 'บันทึกด่วน: ' + QUICK[d.quick].label : (d.isNew ? 'เพิ่ม' : 'แก้ไข') + (body ? 'การวัดร่างกาย' : 'ผลตรวจเลือด')}</h2>${top}
     ${d.bodyVals && Object.keys(d.bodyVals).length ? `<div class="card"><b>📏 จะบันทึกค่าร่างกายจากใบนี้ด้วย</b><div class="mute">${esc(bodyLabel({ values: d.bodyVals }, Object.keys(d.bodyVals).filter(testById)).replace(/ \+\d+$/, ' …'))} · บันทึกเป็นรายการ "วัดร่างกาย" แยกต่างหาก วันเดียวกับผลเลือด</div>
       <button class="btn block" data-act="dropBody">ไม่บันทึกค่าร่างกาย</button></div>` : ''}
-    <p class="mute" style="margin:0 2px">กรอกเฉพาะค่าที่มีในครั้งนี้ ช่องที่เว้นว่างจะไม่ถูกบันทึก (คำว่า "เดิม" สีจางคือค่าครั้งล่าสุด ไม่ใช่ค่าที่กรอก)</p>${fields}
+    <p class="mute" style="margin:0 2px">กรอกเฉพาะค่าที่มี ช่องว่างจะไม่ถูกบันทึก</p>${fields}
     <div class="btns savebar"><button class="btn" data-act="cancel">ยกเลิก</button><button class="btn primary" data-act="saveRec" style="flex:2">✓ บันทึก</button></div>
     ${d.quick === 'bp' ? '<button class="btn block" data-act="saveAgain">บันทึก แล้ววัดอีกครั้ง (เพื่อหาค่าเฉลี่ย)</button>' : ''}${d.quick && !simpleActive() ? '<button class="btn block" data-act="fullForm">แสดงทุกช่อง</button>' : ''}
     ${d.isNew ? '' : '<button class="btn danger block" data-act="delRec">ลบรายการนี้</button>'}`;
 }
 
+/** ตั้งค่า: หน้าเมนู แล้วแตะเข้าหน้าย่อย (ui.set) */
 function viewSettings() {
-  const testList = k => S.tests.filter(t => t.kind === k).map(t => `<div class="row t${t.hidden ? ' off' : ''}">
-      <button class="grow link" data-act="editTest" data-id="${esc(t.id)}">${esc(t.th || t.name)}<div class="mute">${t.th ? esc(t.name) + ' · ' : ''}${esc(t.group)} · ${esc(t.unit)}${rangeText(t) ? ' · ' + esc(rangeText(t)) : ''}${t.bySex ? ' · แยกตามเพศ' : ''}</div></button>
-      <button class="ib" data-act="pin" data-id="${esc(t.id)}" aria-pressed="${!!t.pin}" aria-label="ปักหมุด ${esc(t.name)}">📌</button>
-      <button class="ib" data-act="hideT" data-id="${esc(t.id)}" aria-pressed="${!t.hidden}" aria-label="แสดง ${esc(t.name)}">${t.hidden ? '🚫' : '👁'}</button>
-      <button class="ib" data-act="moveT" data-id="${esc(t.id)}:-1" aria-label="เลื่อนขึ้น ${esc(t.name)}">▲</button>
-      <button class="ib" data-act="moveT" data-id="${esc(t.id)}:1" aria-label="เลื่อนลง ${esc(t.name)}">▼</button></div>`).join('');
-  const sec = Sec.enabled
-    ? `<p style="margin-top:0">🔒 <b>เปิดการล็อกอยู่</b> · ข้อมูลในเครื่องถูกเข้ารหัส${Sec.hasBio ? ' · ปลดล็อกด้วยลายนิ้วมือ / Face ID ได้' : ''}</p>
-      <button class="btn block" data-act="secLock">🔒 ล็อกเดี๋ยวนี้</button>
-      <button class="btn block" data-act="secBio">${Sec.hasBio ? 'ปิดการใช้ลายนิ้วมือ / Face ID' : '👆 เปิดใช้ลายนิ้วมือ / Face ID'}</button>
-      <button class="btn block" data-act="secChange">เปลี่ยน PIN</button>
-      <button class="btn danger block" data-act="secDisable">ปิดการล็อก (เลิกเข้ารหัส)</button>
-      <p class="mute" style="margin-bottom:0">แอปล็อกเองเมื่อปิดหรือสลับไปแอปอื่นเกิน 2 นาที · ถ้าลืม PIN จะเปิดข้อมูลไม่ได้ ต้องกู้คืนจากไฟล์สำรอง</p>`
-    : `<p style="margin-top:0">🔓 ยังไม่ได้ล็อก — ใครเปิดเครื่องได้ก็เห็นข้อมูล และข้อมูลในเครื่องยังไม่ได้เข้ารหัส</p>
-      <button class="btn primary block" data-act="secEnable">ตั้ง PIN เพื่อล็อกและเข้ารหัสข้อมูล</button>`;
-  return `${Install.standalone() ? '' : '<button class="btn block" data-act="install" style="margin:0 0 12px">📲 ติดตั้งเป็นแอปบนมือถือ</button>'}<h2>ความปลอดภัย</h2><div class="card">${sec}</div>
-    <h2>โหมดผู้สูงอายุ</h2><div class="card"><p class="mute" style="margin-top:0">หน้าแรกเหลือ 3 ปุ่มใหญ่ (ความดัน น้ำหนัก น้ำตาล) กับค่าล่าสุด ซ่อนเมนูอื่นทั้งหมด ผู้ดูแลกดปุ่ม "สำหรับผู้ดูแล" ที่ท้ายหน้าเพื่อกลับมาตั้งค่าได้</p>
+  const back = '<button class="btn" data-act="set" data-id="" style="margin:0 0 10px">‹ ตั้งค่า</button>';
+  const p = prof();
+  if (ui.set === 'profile') return `${back}<h2>โปรไฟล์</h2><div class="card">${S.profiles.map(x => `<div class="row"><span class="grow">${esc(x.name)}${x.id === S.activeProfile && S.profiles.length > 1 ? ' <span class="chip ok">ใช้งานอยู่</span>' : ''}
+        <div class="mute">${esc(profLine(x) || 'ยังไม่ระบุเพศ วันเกิด ส่วนสูง')}</div></span>
+        <button class="btn" data-act="renProf" data-id="${esc(x.id)}">แก้ไข</button>
+        ${S.profiles.length > 1 ? `<button class="btn danger" data-act="delProf" data-id="${esc(x.id)}">ลบ</button>` : ''}</div>`).join('')}
+      <button class="btn block" data-act="addProf">+ เพิ่มโปรไฟล์ (เช่น คนในครอบครัว)</button></div>`;
+
+  if (ui.set === 'display') return `${back}<h2>ขนาดตัวอักษร</h2><div class="card"><div class="seg" style="margin:0">${FONT_TH.map((l, i) => `<button class="btn" data-act="font" data-id="${i}" aria-pressed="${(S.font || 0) === i}" style="font-size:${[1, 1.15, 1.3][i]}rem">${l}</button>`).join('')}</div></div>
+    <h2>โหมดผู้สูงอายุ</h2><div class="card"><p class="mute" style="margin-top:0">หน้าแรกเหลือ 3 ปุ่มใหญ่: ความดัน น้ำหนัก น้ำตาล</p>
       <button class="btn block${S.simple ? '' : ' primary'}" data-act="simpleToggle" style="margin-top:0">${S.simple ? 'ปิดโหมดผู้สูงอายุ' : 'เปิดโหมดผู้สูงอายุ'}</button>
-      ${S.simple ? '<button class="btn primary block" data-act="backSimple">‹ กลับสู่หน้าจอแบบง่าย</button>' : ''}</div>
-    <h2>ขนาดตัวอักษร</h2><div class="card"><div class="seg" style="margin:0">${FONT_TH.map((l, i) => `<button class="btn" data-act="font" data-id="${i}" aria-pressed="${(S.font || 0) === i}" style="font-size:${[1, 1.15, 1.3][i]}rem">${l}</button>`).join('')}</div>
-      <p class="mute" style="margin-bottom:0">หรือกดปุ่ม "ก+" ที่มุมบนของจอเพื่อสลับขนาดได้ทุกหน้า</p></div>
-    <h2>โปรไฟล์</h2><div class="card">${S.profiles.map(p => `<div class="row"><span class="grow">${esc(p.name)}${p.id === S.activeProfile ? ' <span class="chip ok">ใช้งานอยู่</span>' : ''}
-      <div class="mute">${esc(profLine(p) || 'ยังไม่ระบุเพศ/วันเกิด/ส่วนสูง')} · ${S.records.filter(r => r.profileId === p.id).length} ครั้ง</div></span>
-      <button class="btn" data-act="renProf" data-id="${esc(p.id)}">แก้ไข</button>
-      ${S.profiles.length > 1 ? `<button class="btn danger" data-act="delProf" data-id="${esc(p.id)}">ลบ</button>` : ''}</div>`).join('')}
-      <button class="btn block" data-act="addProf">+ เพิ่มโปรไฟล์</button></div>
-    <h2>ส่งออก / สำรองข้อมูล</h2><div class="card">
-      <p style="margin-top:0">สำรองล่าสุด: <b>${S.lastBackup ? fmtDate(S.lastBackup, true) : 'ยังไม่เคยสำรอง'}</b></p>
-      <button class="btn block" data-act="export">⬇️ สำรองข้อมูลเป็นไฟล์ (ตั้งรหัสผ่านเข้ารหัสได้)</button>
-      <button class="btn block" data-act="import">⬆️ กู้คืนจากไฟล์สำรอง</button>
-      <input type="file" id="impFile" accept="application/json,.json" hidden>
-      <button class="btn block" data-act="pdf">🖨️ ส่งออกสรุปเป็น PDF (โปรไฟล์ปัจจุบัน)</button>
-      <button class="btn block" data-act="summary">📋 ดูตารางสรุปในแอป</button>
-      <p class="mute">ข้อมูลทั้งหมดอยู่ในเครื่องนี้เท่านั้น หากล้างข้อมูลเบราว์เซอร์หรือเปลี่ยนเครื่อง ข้อมูลจะหาย แอปจะเตือนเมื่อไม่ได้สำรองเกิน 30 วัน</p></div>
-    <h2>จัดการรายการ</h2><div class="card">
-      <p class="mute" style="margin-top:0">📌 ปักหมุดไว้บนสุดของหน้าภาพรวม · 👁 แสดง/ซ่อนจากหน้าภาพรวมและฟอร์มกรอก (ข้อมูลเดิมไม่หาย) · ▲▼ เลื่อนลำดับในหมวด · แตะชื่อเพื่อแก้เกณฑ์</p>
-      <div class="btns"><button class="btn" data-act="hideUnused">ซ่อนรายการที่ยังไม่มีข้อมูล</button><button class="btn" data-act="showAll">แสดงทั้งหมด</button></div></div>
-    <h2>รายการวัดร่างกายและเกณฑ์</h2><div class="card">${testList('body')}</div>
-    <h2>รายการตรวจเลือดและช่วงค่าอ้างอิง</h2><div class="card">${testList('lab')}
-      <button class="btn block" data-act="addTest">+ เพิ่มรายการเอง</button></div>
-    <p class="mute">เกณฑ์ที่แสดงเป็นของโปรไฟล์ปัจจุบัน${prof().sex ? ` (เพศ${SEX_TH[prof().sex]})` : ''} · bobolog ใช้เพื่อบันทึกและติดตามเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์ · OCR โดย Tesseract.js (Apache-2.0)</p>
+      ${S.simple ? '<button class="btn primary block" data-act="backSimple">‹ กลับสู่หน้าจอแบบง่าย</button>' : ''}</div>`;
+
+  if (ui.set === 'security') return `${back}<h2>ความปลอดภัย</h2><div class="card">${Sec.enabled
+    ? `<p style="margin-top:0">🔒 <b>ล็อกอยู่</b> · ข้อมูลในเครื่องถูกเข้ารหัส</p>
+      <button class="btn block" data-act="secLock">ล็อกเดี๋ยวนี้</button>
+      <button class="btn block" data-act="secBio">${Sec.hasBio ? 'ปิดการใช้ลายนิ้วมือ / Face ID' : 'เปิดใช้ลายนิ้วมือ / Face ID'}</button>
+      <button class="btn block" data-act="secChange">เปลี่ยน PIN</button>
+      <button class="btn danger block" data-act="secDisable">ปิดการล็อก</button>
+      <p class="mute" style="margin-bottom:0">ล็อกเองเมื่อออกจากแอปเกิน 2 นาที · ลืม PIN ต้องกู้คืนจากไฟล์สำรอง</p>`
+    : `<p style="margin-top:0">ยังไม่ได้ล็อก ใครเปิดเครื่องได้ก็เห็นข้อมูล</p>
+      <button class="btn primary block" data-act="secEnable">ตั้ง PIN เพื่อล็อกและเข้ารหัส</button>`}</div>`;
+
+  if (ui.set === 'backup') return `${back}<h2>สำรองและส่งออก</h2><div class="card">
+      <p style="margin-top:0">สำรองล่าสุด: <b>${S.lastBackup ? fmtDate(S.lastBackup, true) : 'ยังไม่เคย'}</b></p>
+      <button class="btn primary block" data-act="export" style="margin-top:0">สำรองข้อมูลเป็นไฟล์</button>
+      <button class="btn block" data-act="import">กู้คืนจากไฟล์สำรอง</button>
+      <p class="mute" style="margin-bottom:0">ข้อมูลอยู่ในเครื่องนี้เครื่องเดียว ควรสำรองเป็นระยะ</p></div>
+    <div class="card"><button class="btn block" data-act="pdf" style="margin-top:0">ส่งออกสรุปเป็น PDF</button>
+      <button class="btn block" data-act="summary">ดูตารางเทียบหลายครั้ง</button></div>`;
+
+  if (ui.set === 'items') {
+    const list = k => S.tests.filter(t => t.kind === k).map(t => ui.arrange
+      ? `<div class="row t${t.hidden ? ' off' : ''}"><span class="grow link">${esc(t.th || t.name)}</span>
+          <button class="ib" data-act="pin" data-id="${esc(t.id)}" aria-pressed="${!!t.pin}" aria-label="ปักหมุด ${esc(t.th || t.name)}">📌</button>
+          <button class="ib" data-act="hideT" data-id="${esc(t.id)}" aria-pressed="${!t.hidden}" aria-label="แสดง ${esc(t.th || t.name)}">${t.hidden ? '🚫' : '👁'}</button>
+          <button class="ib" data-act="moveT" data-id="${esc(t.id)}:-1" aria-label="เลื่อนขึ้น ${esc(t.th || t.name)}">▲</button>
+          <button class="ib" data-act="moveT" data-id="${esc(t.id)}:1" aria-label="เลื่อนลง ${esc(t.th || t.name)}">▼</button></div>`
+      : `<button class="row${t.hidden ? ' off' : ''}" data-act="editTest" data-id="${esc(t.id)}"><span class="grow">${esc(t.th || t.name)}${t.pin ? ' 📌' : ''}<div class="mute">${esc([t.th ? t.name : '', t.unit, rangeText(t), t.hidden ? 'ซ่อนอยู่' : ''].filter(Boolean).join(' · '))}</div></span><span class="mute">›</span></button>`).join('');
+    return `${back}<div class="btns" style="margin-bottom:6px"><button class="btn${ui.arrange ? ' primary' : ''}" data-act="arrange">${ui.arrange ? '✓ เสร็จ' : 'จัดเรียง / ซ่อน / ปักหมุด'}</button>${ui.arrange ? '' : '<button class="btn" data-act="addTest">+ เพิ่มรายการ</button>'}</div>
+      ${ui.arrange ? `<div class="btns" style="margin-bottom:6px"><button class="btn" data-act="hideUnused">ซ่อนที่ยังไม่มีข้อมูล</button><button class="btn" data-act="showAll">แสดงทั้งหมด</button></div>
+        <p class="mute" style="margin:0 2px 6px">📌 ปักหมุด · 👁 แสดง/ซ่อน · ▲▼ เลื่อนลำดับ</p>` : '<p class="mute" style="margin:0 2px 6px">แตะรายการเพื่อแก้เกณฑ์</p>'}
+      <h2>วัดร่างกาย</h2><div class="card">${list('body')}</div><h2>ตรวจเลือด</h2><div class="card">${list('lab')}</div>`;
+  }
+
+  const item = (id, icon, title, sub) => `<button class="row" data-act="set" data-id="${id}"><span class="mi" aria-hidden="true">${icon}</span><span class="grow"><div>${title}</div><div class="mute">${esc(sub)}</div></span><span class="mute">›</span></button>`;
+  return `${S.simple ? '<button class="btn primary block" data-act="backSimple" style="margin:0 0 12px">‹ กลับสู่หน้าจอแบบง่าย</button>' : ''}
+    <div class="card">
+      ${item('profile', '👤', 'โปรไฟล์', [p.name, profLine(p)].filter(Boolean).join(' · '))}
+      ${item('display', '🔠', 'การแสดงผล', `ตัวอักษร${FONT_TH[S.font || 0]}${S.simple ? ' · โหมดผู้สูงอายุ' : ''}`)}
+      ${item('security', '🔒', 'ความปลอดภัย', Sec.enabled ? `ล็อกด้วย PIN${Sec.hasBio ? ' และลายนิ้วมือ / Face ID' : ''}` : 'ยังไม่ได้ตั้ง PIN')}
+      ${item('backup', '💾', 'สำรองและส่งออก', S.lastBackup ? `สำรองล่าสุด ${fmtDate(S.lastBackup, true)}` : 'ยังไม่เคยสำรอง')}
+      ${item('items', '📋', 'รายการตรวจและเกณฑ์', `${S.tests.filter(t => !t.hidden).length} รายการ`)}
+      ${Install.standalone() ? '' : `<button class="row" data-act="install"><span class="mi" aria-hidden="true">📲</span><span class="grow"><div>ติดตั้งเป็นแอปบนมือถือ</div></span><span class="mute">›</span></button>`}
+    </div>
+    <p class="mute" style="text-align:center">ใช้เพื่อบันทึกและติดตามเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์</p>
     <p class="ver">bobolog ${esc(typeof APP_VERSION === 'string' ? APP_VERSION : '')}</p>`;
+}
+
+/** หน้าต้อนรับครั้งแรก 3 ขั้น: โปรไฟล์ → ติดตั้ง → PIN (ข้ามได้ทุกขั้น) */
+function viewWelcome() {
+  const step = ui.wstep || 1, p = prof(), dots = `<div class="wsteps" aria-label="ขั้นที่ ${step} จาก 3">${[1, 2, 3].map(i => `<i class="${i === step ? 'on' : ''}"></i>`).join('')}</div>`;
+  if (step === 1) return `<div class="empty" style="padding:18px 10px 4px"><img src="icons/icon-192.png" alt="" style="width:5rem;height:5rem;border-radius:24%"><h2>ยินดีต้อนรับสู่ bobolog</h2>
+      <p>บันทึกผลเลือด ความดัน น้ำหนัก และน้ำตาล<br>ข้อมูลอยู่ในเครื่องนี้เท่านั้น</p></div>${dots}
+    <div class="card"><label for="pName" style="margin-top:0">ชื่อที่ใช้เรียก</label><input id="pName" value="${p.name === 'ฉัน' ? '' : esc(p.name)}" placeholder="เช่น ชื่อเล่น">
+      <div class="grid2"><div><label for="pSex">เพศ</label><select id="pSex"><option value="">ไม่ระบุ</option><option value="m"${p.sex === 'm' ? ' selected' : ''}>ชาย</option><option value="f"${p.sex === 'f' ? ' selected' : ''}>หญิง</option></select></div>
+      <div><label for="pHeight">ส่วนสูง (ซม.)</label><input id="pHeight" type="number" inputmode="decimal" step="any" value="${p.height ?? ''}"></div></div>
+      <label for="pDob">วันเกิด</label><input id="pDob" type="date" value="${esc(p.dob)}" max="${today()}">
+      <p class="mute" style="margin-bottom:0">ใช้เลือกเกณฑ์ตามเพศ และคำนวณ BMI กับค่าไต</p></div>
+    <div class="btns"><button class="btn" data-act="wNext" data-id="skip">ข้าม</button><button class="btn primary" data-act="wNext" style="flex:2">ถัดไป</button></div>
+    <button class="btn block" data-act="import">มีไฟล์สำรองอยู่แล้ว? กู้คืนข้อมูล</button>
+    <div style="text-align:center"><button class="lk-link" data-act="wSkipAll">ข้ามทั้งหมด</button></div>`;
+  if (step === 2) return `${dots}<div class="card">${Install.html()}</div>
+    <div class="btns"><button class="btn primary" data-act="wNext">ถัดไป</button></div>
+    <div style="text-align:center"><button class="lk-link" data-act="wSkipAll">ข้ามทั้งหมด</button></div>`;
+  return `${dots}<div class="card"><b style="font-size:1.15rem">🔒 ตั้ง PIN ล็อกแอป</b>
+      <p class="mute" style="margin:6px 0 12px">ข้อมูลสุขภาพจะถูกเข้ารหัส และต้องใส่ PIN ทุกครั้งที่เปิดแอป ถ้าลืม PIN ต้องกู้คืนจากไฟล์สำรอง</p>
+      <button class="btn primary block xl" data-act="wPin" style="margin-top:0">ตั้ง PIN ตอนนี้</button>
+      <button class="btn block" data-act="wSkipAll">ไว้ทีหลัง</button></div>`;
 }
 
 function viewProf() {
@@ -614,11 +615,12 @@ function readForm() {
 
 const actions = {
   new: () => { $('#sheet').hidden = false; },
+  set: id => { ui.set = id || null; ui.arrange = false; render(); },
+  arrange: () => { ui.arrange = !ui.arrange; render(true); },
   closeSheet: () => { $('#sheet').hidden = true; },
   newLab: () => newDraft(null, 'lab'),
   newBody: () => newDraft(null, 'body'),
   async font(n) { S.font = n != null ? +n : ((S.font || 0) + 1) % 3; await save(); render(true); toast('ขนาดตัวอักษร: ' + FONT_TH[S.font]); },
-  step: arg => { const [id, d] = arg.split(':'); stepRow(id, +d); },
   quick: id => { if (QUICK[id]) newDraft(null, 'body', id); },
   saveAgain: () => actions.saveRec(null, true),
   fullForm: () => { readForm(); ui.draft.quick = null; render(); },
@@ -638,7 +640,7 @@ const actions = {
   },
   async showAll() { for (const t of S.tests) t.hidden = false; await save(); render(true); },
   edit: id => newDraft(S.records.find(r => r.id === id)),
-  trend: id => { ui.trendTest = id; ui.tab = 'trend'; render(); },
+  trend: id => { ui.trendTest = id; ui.from = 'home'; ui.tab = 'trend'; render(); },
   hist: k => { ui.hist = k; render(); },
   cancel: () => { ui.tab = ui.back || 'home'; ui.draft = null; render(); },
   async saveRec(_, again) {
@@ -745,8 +747,23 @@ const actions = {
   async snooze() { const d = new Date(Date.now() + 7 * 864e5); S.backupSnooze = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`; await save(); render(true); },
   summary: () => { ui.tab = 'summary'; render(); },
   sumKind: k => { ui.sumKind = k; render(true); },
-  home: () => { ui.tab = 'home'; render(); },
-  care: () => { ui.care = true; ui.tab = 'settings'; render(); },
+  home: () => { ui.tab = 'home'; ui.from = null; render(); },
+  /* ----- หน้าต้อนรับ ----- */
+  async wNext(arg) {
+    const step = ui.wstep || 1;
+    if (step === 1 && arg !== 'skip') {
+      const p = prof(), h = +$('#pHeight').value;
+      p.name = $('#pName').value.trim() || p.name; p.sex = $('#pSex').value; p.dob = $('#pDob').value; p.height = h > 0 && isFinite(h) ? h : null;
+      await save();
+    }
+    ui.wstep = step + 1;
+    if (ui.wstep === 2 && !Install.available()) ui.wstep = 3;          // ติดตั้งแล้ว หรือเบราว์เซอร์นี้ติดตั้งไม่ได้: ข้ามขั้นนี้
+    if (ui.wstep === 2) Install.seen();
+    render();
+  },
+  async wPin() { await actions.secEnable(); if (Sec.enabled) actions.wSkipAll(); },
+  async wSkipAll() { S.onboarded = true; ui.wstep = null; ui.tab = 'home'; await save(); render(); },
+  care: () => { ui.care = true; ui.set = null; ui.tab = 'settings'; render(); },
   backSimple: () => { ui.care = false; ui.tab = 'home'; render(); },
   async simpleToggle() {
     S.simple = !S.simple; ui.care = S.simple;          // เปิดจากหน้าตั้งค่า = ผู้ดูแลกำลังใช้อยู่ ยังเห็นเมนูเต็มจนกว่าจะกด "กลับสู่หน้าจอแบบง่าย"
@@ -781,7 +798,7 @@ const actions = {
   },
   secLock: () => lockNow(),
   install: () => (Install.available() ? Install.show() : toast(Install.standalone() ? 'ติดตั้งอยู่แล้ว' : 'เบราว์เซอร์นี้ติดตั้งให้ไม่ได้ ลองเปิดด้วย Chrome (Android) หรือ Safari (iPhone)')),
-  import: () => { noLockUntil = Date.now() + 5 * 60e3; $('#impFile').click(); },
+  import: () => { noLockUntil = Date.now() + 5 * 60e3; $('#impFile').click(); },      // ช่องเลือกไฟล์อยู่ใน index.html (ใช้ได้จากทุกหน้า)
   pdf: printSummary,
 };
 
@@ -874,39 +891,44 @@ async function handleOcrFile(file) {
 const Install = (() => {
   const KEY = 'bobolog.install';            // เก็บในเครื่อง (ไม่ใช่ข้อมูลสุขภาพ): เวลาที่กด "ไว้ทีหลัง" หรือ 'done' เมื่อติดตั้งแล้ว
   let deferred = null;                       // เหตุการณ์ beforeinstallprompt ของ Android/Chrome
+  const ua = navigator.userAgent;
   const get = () => { try { return localStorage.getItem(KEY); } catch (e) { return null; } };
   const set = v => { try { localStorage.setItem(KEY, v); } catch (e) { /* โหมดส่วนตัว: ไม่เป็นไร */ } };
   const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-  const ios = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const ios = () => /iphone|ipad|ipod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const inApp = () => /\bLine\/|FBAN|FBAV|FB_IAB|Instagram|MicroMessenger|TikTok/i.test(ua);     // เปิดจากลิงก์ใน LINE / Facebook ฯลฯ: เบราว์เซอร์ในแอปพวกนี้ติดตั้งไม่ได้
   const el = () => $('#install');
-  const available = () => !standalone() && (!!deferred || ios());
-  function show() {
-    const how = deferred
-      ? `<p class="mute" style="margin:4px 0 12px">เปิดได้จากหน้าจอหลักเหมือนแอปทั่วไป ใช้ได้แม้ไม่มีอินเทอร์เน็ต ข้อมูลยังอยู่ในเครื่องนี้เท่านั้น</p>
-         <button class="btn primary block xl" data-ins="go">⬇️ ติดตั้งแอป</button>`
-      : `<p class="mute" style="margin:4px 0 0">บน iPhone / iPad ทำตามนี้ (ใช้เวลาไม่ถึงนาที):</p>
-         <ol><li>กดปุ่ม <b>แชร์</b> <span aria-hidden="true">(สี่เหลี่ยมมีลูกศรชี้ขึ้น)</span> ที่แถบของเบราว์เซอร์</li><li>เลื่อนลงแล้วเลือก <b>"เพิ่มไปยังหน้าจอโฮม"</b></li><li>กด <b>"เพิ่ม"</b> — ไอคอนผีน้อยสีแดงจะไปอยู่บนหน้าจอหลัก</li></ol>`;
-    el().innerHTML = `<div class="card" role="dialog" aria-modal="true" aria-label="ติดตั้ง bobolog ลงมือถือ">
-      <div class="ihead"><img src="icons/icon-192.png" alt=""><div><b style="font-size:1.15rem">ติดตั้ง bobolog ลงมือถือ</b><div class="mute">ไม่ต้องผ่านร้านค้าแอป</div></div></div>
-      ${how}<button class="btn block" data-ins="later">ไว้ทีหลัง</button></div>`;
-    el().hidden = false;
+  const available = () => !standalone() && (!!deferred || ios() || inApp());
+  /** เนื้อหาคำแนะนำ ใช้ทั้งในแผ่นเด้งและหน้าต้อนรับ */
+  function html() {
+    const head = `<div class="ihead"><img src="icons/icon-192.png" alt=""><div><b style="font-size:1.15rem">ติดตั้ง bobolog ลงมือถือ</b><div class="mute">เปิดจากหน้าจอหลักได้เหมือนแอป ใช้ได้แม้ไม่มีเน็ต</div></div></div>`;
+    if (inApp()) return `${head}<p style="margin:8px 0 0"><b>ตอนนี้เปิดอยู่ในแอปอื่น (เช่น LINE) ซึ่งติดตั้งไม่ได้</b></p>
+      <ol><li>กดปุ่มเมนู <b>⋯</b> หรือไอคอนเข็มทิศ ที่มุมจอ</li><li>เลือก <b>"เปิดใน${ios() ? ' Safari' : 'เบราว์เซอร์'}"</b></li><li>แล้วทำการติดตั้งจากที่นั่น</li></ol>`;
+    if (deferred) return `${head}<button class="btn primary block xl" data-ins="go" style="margin-top:12px">ติดตั้งแอป</button>`;
+    // iPhone / iPad: เว็บสั่งติดตั้งเองไม่ได้ ต้องทำผ่านเมนูแชร์ และแอปที่ติดตั้งจะมีที่เก็บข้อมูลแยกจากเบราว์เซอร์
+    const warn = S && S.records.length ? `<div class="card warn" style="margin:10px 0 0"><b>ข้อมูลที่บันทึกไว้จะไม่ตามไปด้วย</b>
+        <div class="mute">บน iPhone แอปที่ติดตั้งเก็บข้อมูลแยกจากเบราว์เซอร์นี้ ให้สำรองข้อมูลก่อน แล้วกด "กู้คืนข้อมูล" ในแอปที่ติดตั้ง</div>
+        <button class="btn primary block" data-act="export">สำรองข้อมูลก่อน</button></div>` : '';
+    return `${head}${warn}<ol><li>กดปุ่ม <b>แชร์</b> <svg viewBox="0 0 24 24" width="20" height="20" style="vertical-align:-4px" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M8 7l4-4 4 4M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg> (ล่างจอใน Safari หรือมุมขวาบนใน Chrome)</li>
+      <li>เลื่อนลงแล้วเลือก <b>"เพิ่มไปยังหน้าจอโฮม"</b></li><li>กด <b>"เพิ่ม"</b> แล้วเปิดแอปจากไอคอนผีสีแดงบนหน้าจอหลัก</li></ol>`;
   }
+  function show() { el().innerHTML = `<div class="card" role="dialog" aria-modal="true" aria-label="ติดตั้ง bobolog ลงมือถือ">${html()}<button class="btn block" data-ins="later">ไว้ทีหลัง</button></div>`; el().hidden = false; }
   function hide() { el().hidden = true; el().innerHTML = ''; }
-  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; maybe(); });
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; if (S && ui.tab === 'welcome' && ui.wstep === 2) render(true); else maybe(); });
   window.addEventListener('appinstalled', () => { set('done'); deferred = null; hide(); toast('ติดตั้ง bobolog แล้ว เปิดได้จากหน้าจอหลัก'); });
   document.addEventListener('click', async e => {
     const b = e.target.closest('[data-ins]'); if (!b && e.target !== el()) return;
     if (!b || b.dataset.ins === 'later') { set(String(Date.now())); return hide(); }      // แตะนอกกล่อง = ไว้ทีหลัง
-    if (deferred) { hide(); const ev = deferred; deferred = null; ev.prompt(); const r = await ev.userChoice.catch(() => null); if (!r || r.outcome !== 'accepted') set(String(Date.now())); }
+    if (deferred) { hide(); const ev = deferred; deferred = null; ev.prompt(); const r = await ev.userChoice.catch(() => null); if (!r || r.outcome !== 'accepted') set(String(Date.now())); if (S && ui.tab === 'welcome') render(true); }
   });
-  /** ขึ้นเองเมื่อเหมาะสม: ยังไม่ได้ติดตั้ง, ปลดล็อกแล้ว, อยู่หน้าแรก, และไม่ได้กด "ไว้ทีหลัง" ภายใน 14 วัน */
+  /** ขึ้นเองเมื่อเหมาะสม: ยังไม่ได้ติดตั้ง, ปลดล็อกแล้ว, อยู่หน้าแรก, และไม่ได้เห็น/กด "ไว้ทีหลัง" ภายใน 14 วัน */
   function maybe() {
     const v = get();
     if (!S || !available() || v === 'done' || (v && Date.now() - +v < 14 * 864e5)) return;
     if (ui.tab !== 'home' || !el().hidden || PinPad.open || !$('#crop').hidden || !$('#modal').hidden) return;
     show();
   }
-  return { maybe, show, available, standalone };
+  return { maybe, show, html, available, standalone, seen: () => set(String(Date.now())) };
 })();
 
 /* ---------- ล็อก / ปลดล็อก ---------- */
@@ -953,7 +975,7 @@ async function lockNow() {
   try { vault = await Store.get('state'); } catch (e) { return toast('ล็อกไม่ได้: อ่านข้อมูลที่บันทึกไว้ไม่สำเร็จ'); }
   if (!vault || !vault.vault) return toast('ล็อกไม่ได้: ข้อมูลยังไม่ได้ถูกบันทึกแบบเข้ารหัส');
   S = null; Sec.lock();
-  ui = { tab: 'home', trendTest: null, draft: null, hist: 'all', off: {} };
+  ui = { tab: 'home', trendTest: null, draft: null, hist: 'all' };
   $('#view').innerHTML = ''; $('#print').innerHTML = '';                 // ไม่ทิ้งข้อมูลไว้ในหน้าเว็บตอนล็อก
   for (const id of ['crop', 'modal', 'sheet', 'install']) { $('#' + id).hidden = true; if (id !== 'sheet') $('#' + id).innerHTML = ''; }
   await unlockFlow(); render();
@@ -965,31 +987,19 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* ---------- events ---------- */
-let sw = null, swipedAt = 0;
-document.addEventListener('pointerdown', e => { const r = e.target.closest('[data-swipe]'); sw = r ? { id: r.dataset.swipe, x: e.clientX, y: e.clientY } : null; });
-document.addEventListener('pointercancel', () => { sw = null; });
-document.addEventListener('pointerup', e => {
-  if (!sw) return;
-  const dx = e.clientX - sw.x, dy = e.clientY - sw.y, id = sw.id; sw = null;
-  if (Math.hypot(dx, dy) > 10) swipedAt = Date.now();          // ลากแล้วปล่อย ไม่นับเป็นการแตะ
-  if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-  swipedAt = Date.now(); stepRow(id, dx > 0 ? 1 : -1);
-});
-document.addEventListener('keydown', e => {
-  if (e.target.matches && e.target.matches('[data-swipe]') && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); return actions.trend(e.target.dataset.swipe); }
-  const r = e.target.closest && e.target.closest('[data-swipe]');
-  if (S && r && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); stepRow(r.dataset.swipe, e.key === 'ArrowLeft' ? 1 : -1); }
-});
 document.addEventListener('click', e => {
   if (!S) return;                                                      // ล็อกอยู่: หน้าล็อกจัดการคลิกเอง
-  if (Date.now() - swipedAt < 400) { e.preventDefault(); return; }     // การปัดไม่นับเป็นการแตะ
   const b = e.target.closest('[data-act]');
   if (b && actions[b.dataset.act]) { if (b.tagName === 'A') e.preventDefault(); return actions[b.dataset.act](b.dataset.id); }
   if (e.target.id === 'sheet') return actions.closeSheet();
-  const n = e.target.closest('nav button'); if (n) { ui.tab = n.dataset.tab; ui.draft = null; ui.off = {}; render(); }
+  const n = e.target.closest('nav button'); if (n) { ui.tab = n.dataset.tab; ui.draft = null; ui.set = null; ui.arrange = false; ui.from = null; render(); }
 });
+document.addEventListener('toggle', async e => {                      // จำว่าหมวดไหนบนหน้าภาพรวมถูกเปิด/พับไว้
+  if (!S || !e.target.matches || !e.target.matches('details.grp')) return;
+  S.openGroups = $$('details.grp').filter(d => d.open).map(d => d.dataset.grp); await save();
+}, true);
 $('#fab').addEventListener('click', () => { if (S) actions.new(); });
-$('#profileSel').addEventListener('change', async e => { if (!S) return; S.activeProfile = e.target.value; ui.off = {}; await save(); if (['edit', 'test', 'prof'].includes(ui.tab)) ui.tab = 'home'; render(); });
+$('#profileSel').addEventListener('change', async e => { if (!S) return; S.activeProfile = e.target.value; await save(); if (['edit', 'test', 'prof'].includes(ui.tab)) ui.tab = 'home'; render(); });
 document.addEventListener('input', e => {       // แก้ตัวเลขในหน้าตรวจค่า = ตั้งใจจะนำเข้าค่านั้น → ติ๊กให้
   if (S && e.target.dataset && e.target.dataset.revv) { const c = $(`[data-rev="${CSS.escape(e.target.dataset.revv)}"]`); if (c && e.target.value !== '') { c.checked = true; revCount(); } }
 });
@@ -1016,9 +1026,9 @@ document.addEventListener('change', async e => {
       const data = normalize(raw);
       if (!confirm(`กู้คืนข้อมูล ${data.records.length} ครั้ง จาก ${data.profiles.length} โปรไฟล์? ข้อมูลปัจจุบันในเครื่องจะถูกแทนที่`)) return;
       // ขนาดตัวอักษรและโหมดผู้สูงอายุเป็นค่าของเครื่องนี้ ไม่เอาจากไฟล์ · วันที่สำรองล่าสุด = วันที่ของไฟล์ที่เพิ่งกู้
-      S = { v: 2, profiles: data.profiles, activeProfile: data.activeProfile, tests: data.tests, records: data.records, font: S.font, simple: S.simple, created: data.created,
+      S = { v: 2, profiles: data.profiles, activeProfile: data.activeProfile, tests: data.tests, records: data.records, font: S.font, simple: S.simple, created: data.created, onboarded: true, openGroups: S.openGroups,
         lastBackup: /^\d{4}-\d{2}-\d{2}$/.test(exported || '') && exported <= today() ? exported : data.lastBackup, backupSnooze: null };
-      ui.off = {}; ui.hist = 'all'; ui.trendTest = null;
+      ui.hist = 'all'; ui.trendTest = null; if (ui.tab === 'welcome') { ui.tab = 'home'; ui.wstep = null; }
       if (Store.db) memOnly = false;      // กู้คืนสำเร็จ: กลับมาบันทึกลงเครื่องได้ แม้ก่อนหน้านี้ข้อมูลเดิมจะเปิดไม่ได้
       await save(); render(); toast('กู้คืนข้อมูลแล้ว');
     } catch (err) { toast('กู้คืนไม่สำเร็จ: ' + err.message); }
@@ -1046,6 +1056,7 @@ document.addEventListener('change', async e => {
     catch (e) { memOnly = true; S = freshState(); msg = 'เปิดข้อมูลที่เก็บไว้ไม่ได้ — แอปจะไม่เขียนทับข้อมูลเดิม ลองกู้คืนจากไฟล์สำรอง'; }   // memOnly กันการบันทึกทับ
   }
   if (msg) setTimeout(() => toast(msg), 300);
+  if (!S.onboarded && !S.records.length) { ui.tab = 'welcome'; ui.wstep = 1; }       // เปิดครั้งแรก: หน้าต้อนรับ 3 ขั้น
   render();
   const q = new URLSearchParams(location.search).get('quick');     // จากทางลัดกดค้างที่ไอคอนแอป
   if (QUICK[q]) { history.replaceState(null, '', location.pathname); newDraft(null, 'body', q); }

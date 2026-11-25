@@ -38,8 +38,9 @@ nav button{flex:1;background:none;border:0;color:var(--mute);font:inherit;font-s
   display:flex;flex-direction:column;align-items:center;gap:2px}
 nav button svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 nav button[aria-current=page]{color:var(--brand);font-weight:700}
-#fab{position:fixed;right:16px;bottom:calc(env(safe-area-inset-bottom) + 72px);z-index:6;width:56px;height:56px;border-radius:50%;
-  border:0;background:var(--brand);color:var(--brand-ink);font-size:1.875rem;line-height:1;box-shadow:0 3px 10px rgba(0,0,0,.3)}
+#fab{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 76px);z-index:6;height:3.3rem;padding:0 1.6rem;border-radius:999px;
+  border:0;background:var(--brand);color:var(--brand-ink);font:inherit;font-size:1.1rem;font-weight:700;white-space:nowrap;box-shadow:0 3px 12px rgba(0,0,0,.3)}
+#fab[hidden]{display:none}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px}
 a{color:var(--brand)}
 h2{font-size:1rem;margin:18px 2px 8px}
@@ -53,7 +54,32 @@ h2:first-child{margin-top:2px}
 .savebar .btn{min-height:3rem;font-size:1.05rem}
 body[data-tab=edit] nav{display:none}
 .ver{text-align:center;color:var(--mute);opacity:.45;font-size:.8rem;margin:18px 0 0}
-.quick{display:flex;gap:8px;margin-bottom:10px}
+.summary.one{display:block;margin:2px 2px 4px;font-size:1rem}
+.summary.one b{display:inline;font-size:inherit}
+html[data-font] .summary.one b{font-size:inherit!important;line-height:inherit!important;min-width:0}
+.row.hrow{padding:13px 0;gap:8px}
+.row.hrow .val{font-size:1.05rem}
+.row.off .grow{opacity:.45}
+details.grp{margin-bottom:8px}
+details.grp>summary{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;min-height:3rem;
+  background:var(--card);border:1px solid var(--line);border-radius:14px;font-weight:600;color:var(--ink);font-size:1rem;cursor:pointer}
+details.grp>summary::-webkit-details-marker{display:none}
+details.grp>summary::after{content:'›';color:var(--mute);font-weight:400;transform:rotate(90deg);transition:transform .15s;margin-left:2px}
+details.grp[open]>summary::after{transform:rotate(-90deg)}
+details.grp>summary>span:first-child{flex:1}
+details.grp[open]>summary{border-radius:14px 14px 0 0;border-bottom:0}
+details.grp[open]>.card{border-radius:0 0 14px 14px;margin-bottom:0}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 4px}
+.tile{appearance:none;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-weight:700;font-size:1.05rem;border-radius:16px;
+  padding:16px 8px;display:flex;flex-direction:column;align-items:center;gap:6px;min-height:6rem}
+.tile span{font-size:1.9rem;line-height:1}
+.tile:active{background:var(--line)}
+.mi{font-size:1.35rem;width:2rem;text-align:center;flex:none}
+.wsteps{display:flex;gap:8px;justify-content:center;margin:6px 0 12px}
+.wsteps i{width:9px;height:9px;border-radius:50%;background:var(--line)}
+.wsteps i.on{background:var(--brand);width:22px;border-radius:5px}
+body[data-tab=welcome] nav{display:none}
+main{padding-bottom:calc(env(safe-area-inset-bottom) + 150px)}
 /* ล็อก / กล่องรหัสผ่าน / ครอบตัดรูป */
 #lock{position:fixed;inset:0;z-index:30;background:var(--bg);display:flex;align-items:center;justify-content:center;overflow:auto;padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px)}
 #lock[hidden],#modal[hidden],#crop[hidden],#install[hidden]{display:none}
@@ -107,22 +133,12 @@ table.sum td.abn.high{color:var(--hi)} table.sum td.abn.low{color:var(--lo)}
 body[data-simple="1"] nav{display:none}
 #toast.act.show{pointer-events:auto;display:flex;gap:14px;align-items:center;border-radius:14px}
 #toast button{appearance:none;background:none;border:1px solid #fff;color:#fff;border-radius:999px;font:inherit;font-weight:700;padding:6px 14px;min-height:40px;white-space:nowrap}
-.quick .btn{flex:1;padding:8px 4px;font-size:.95rem;white-space:nowrap}
 .row.t{gap:5px}
 .row.t.off .link{opacity:.45}
 .link{appearance:none;background:none;border:0;color:inherit;font:inherit;text-align:left;padding:0;min-height:40px}
 .ib{appearance:none;flex:none;border:1px solid var(--line);background:none;color:inherit;border-radius:8px;width:2.4rem;height:2.4rem;font:inherit;font-size:.95rem;padding:0}
 .ib[aria-pressed=false]{opacity:.35}
 .ib[aria-pressed=true]{border-color:var(--brand)}
-.row[data-swipe]{position:relative;overflow:hidden}
-.row[data-swipe]>*{position:relative;z-index:1}
-.row[data-swipe]{touch-action:pan-y;user-select:none;-webkit-user-select:none}
-.row.past{background:var(--ocr);margin:0 -14px;padding-left:14px;padding-right:14px;width:calc(100% + 28px)}
-.pos{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:4px;font-size:.85rem;color:var(--mute);white-space:nowrap}
-.ar{appearance:none;width:2.5rem;height:2.1rem;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit;font-size:1.25rem;line-height:1;padding:0}
-.ar.dim{opacity:.3}
-.row[data-swipe]{cursor:pointer}
-#fontBtn{appearance:none;background:transparent;color:inherit;border:1px solid currentColor;border-radius:8px;font:inherit;font-weight:700;padding:6px 10px;min-height:2.4rem;white-space:nowrap}
 html[data-font="1"]{font-size:19px}
 html[data-font="2"]{font-size:22px}
 html[data-font="1"],html[data-font="2"]{--mute:#4a4541}
@@ -132,23 +148,14 @@ html[data-font="1"] .row.t .link,html[data-font="2"] .row.t .link{flex:1 0 100%}
 html[data-font="1"] .summary,html[data-font="2"] .summary{flex-direction:column;gap:0}
 html[data-font="1"] .summary .card,html[data-font="2"] .summary .card{display:flex;align-items:baseline;gap:12px;text-align:left;margin-bottom:8px}
 html[data-font="1"] .summary b,html[data-font="2"] .summary b{font-size:1.4rem!important;line-height:1.4!important;min-width:2.2em}
-html[data-font="1"] .row[data-swipe],html[data-font="2"] .row[data-swipe]{flex-wrap:wrap;row-gap:6px}
-html[data-font="1"] .row[data-swipe]>.grow,html[data-font="2"] .row[data-swipe]>.grow{flex:1 0 100%}
-html[data-font="1"] .row[data-swipe]>.vcol,html[data-font="2"] .row[data-swipe]>.vcol{flex:1;text-align:left!important}
-html[data-font="1"] .row[data-swipe] .pos,html[data-font="2"] .row[data-swipe] .pos{justify-content:flex-start}
 html[data-font="2"] .field{grid-template-columns:1fr}
 html[data-font="2"] .field input{text-align:left}
 html[data-font="2"] .grid2{grid-template-columns:1fr}
 html[data-font="2"] header h1{font-size:1rem}
-@keyframes inL{from{transform:translateX(-28px);opacity:0}to{transform:none;opacity:1}}
-@keyframes inR{from{transform:translateX(28px);opacity:0}to{transform:none;opacity:1}}
-.row.in-l{animation:inL .18s ease-out}.row.in-r{animation:inR .18s ease-out}
-@media (prefers-reduced-motion:reduce){.row.in-l,.row.in-r{animation:none}}
 .row .grow{flex:1;min-width:0}
 .row .val{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 .chip{display:inline-block;font-size:.85rem;font-weight:700;border-radius:999px;padding:1px 8px;white-space:nowrap}
 .chip.ok{background:var(--okbg);color:var(--ok)} .chip.high{background:var(--hibg);color:var(--hi)} .chip.low{background:var(--lobg);color:var(--lo)}
-.delta{font-size:.85rem;color:var(--mute);white-space:nowrap}
 .btn{appearance:none;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-weight:600;
   border-radius:10px;padding:10px 14px;min-height:44px}
 .btn.primary{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
@@ -213,23 +220,28 @@ th:first-child,td:first-child{text-align:left}
 <body>
 <header>
   <h1><img src="icons/icon-192.png" alt="" class="logo">bobolog</h1>
-  <button id="fontBtn" data-act="font" aria-label="เปลี่ยนขนาดตัวอักษร">ก+</button>
   <select id="profileSel" aria-label="โปรไฟล์"></select>
 </header>
 <main id="view"></main>
-<button id="fab" aria-label="เพิ่มผลตรวจ">+</button>
+<button id="fab" aria-label="บันทึกค่าใหม่">＋ บันทึก</button>
 <nav>
   <button data-tab="home"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>ภาพรวม</button>
   <button data-tab="history"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>ประวัติ</button>
   <button data-tab="trend"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg>แนวโน้ม</button>
   <button data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.8 1.2V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3.1 14H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 10 3.1V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0 1.2 2.9h.1a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>ตั้งค่า</button>
 </nav>
-<div id="sheet" hidden><div class="card" role="dialog" aria-label="เลือกประเภทที่จะบันทึก">
-  <b>จะบันทึกอะไร?</b>
-  <button class="btn block" data-act="newLab">🩸 ผลตรวจเลือดจากแล็บ<div class="mute">ถ่ายรูปใบผล หรือกรอกเอง</div></button>
-  <button class="btn block" data-act="newBody">📏 วัดร่างกาย<div class="mute">ความดัน ชีพจร น้ำตาลปลายนิ้ว น้ำหนัก สัดส่วน</div></button>
+<div id="sheet" hidden><div class="card" role="dialog" aria-label="เลือกสิ่งที่จะบันทึก">
+  <b>บันทึกอะไร?</b>
+  <div class="tiles">
+    <button class="tile" data-act="quick" data-id="bp"><span aria-hidden="true">🫀</span>ความดัน</button>
+    <button class="tile" data-act="quick" data-id="weight"><span aria-hidden="true">⚖️</span>น้ำหนัก</button>
+    <button class="tile" data-act="quick" data-id="sugar"><span aria-hidden="true">🩸</span>น้ำตาล</button>
+    <button class="tile" data-act="newLab"><span aria-hidden="true">📄</span>ผลเลือด</button>
+  </div>
+  <button class="btn block" data-act="newBody">วัดร่างกายอื่น ๆ (รอบเอว ไขมัน ฯลฯ)</button>
   <button class="btn block" data-act="closeSheet">ยกเลิก</button>
 </div></div>
+<input type="file" id="impFile" accept="application/json,.json" hidden>
 <div id="install" hidden></div>
 <div id="crop" hidden></div>
 <div id="lock" hidden></div>
