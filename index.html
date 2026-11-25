@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>BloodLog — บันทึกผลตรวจเลือดและสุขภาพ</title>
+<title>bobolog — บันทึกผลตรวจเลือดและสุขภาพ</title>
 <meta name="description" content="เก็บผลตรวจเลือดย้อนหลัง ดูแนวโน้ม เก็บข้อมูลในเครื่องเท่านั้น">
 <meta name="theme-color" content="#b3261e">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="BloodLog">
+<meta name="apple-mobile-web-app-title" content="bobolog">
 <style>
 :root{
   --bg:#f6f4f2; --card:#fff; --ink:#1d1b1a; --mute:#6b6561; --line:#e4dfdb;
@@ -27,7 +27,8 @@ html,body{margin:0;background:var(--bg);color:var(--ink);
   font:1rem/1.5 system-ui,-apple-system,"Sarabun","Noto Sans Thai",sans-serif;-webkit-text-size-adjust:100%}
 header{position:sticky;top:0;z-index:5;background:var(--brand);color:var(--brand-ink);
   padding:calc(env(safe-area-inset-top) + 10px) 14px 10px;display:flex;align-items:center;gap:10px}
-header h1{font-size:1.125rem;margin:0;flex:1;font-weight:700}
+header h1{font-size:1.125rem;margin:0;flex:1;font-weight:700;display:flex;align-items:center;gap:8px}
+.logo{width:1.9rem;height:1.9rem;border-radius:28%;flex:none}
 header select{max-width:38%;background:transparent;color:inherit;border:1px solid currentColor;border-radius:8px;padding:6px 8px;font:inherit}
 header select option{color:#000}
 main{padding:14px 14px calc(env(safe-area-inset-bottom) + 96px);max-width:720px;margin:0 auto}
@@ -55,7 +56,14 @@ body[data-tab=edit] nav{display:none}
 .quick{display:flex;gap:8px;margin-bottom:10px}
 /* ล็อก / กล่องรหัสผ่าน / ครอบตัดรูป */
 #lock{position:fixed;inset:0;z-index:30;background:var(--bg);display:flex;align-items:center;justify-content:center;overflow:auto;padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px)}
-#lock[hidden],#modal[hidden],#crop[hidden]{display:none}
+#lock[hidden],#modal[hidden],#crop[hidden],#install[hidden]{display:none}
+#install{position:fixed;inset:0;z-index:24;background:rgba(0,0,0,.45);display:flex;align-items:flex-end}
+#install .card{width:100%;max-width:720px;margin:0 auto;border-radius:18px 18px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom) + 16px)}
+#install .ihead{display:flex;gap:12px;align-items:center;margin-bottom:6px}
+#install .ihead img{width:3.4rem;height:3.4rem;border-radius:24%}
+#install ol{margin:8px 0 4px;padding-left:1.3em}
+#install li{margin:6px 0}
+.lockbox .logo-lg{width:4.4rem;height:4.4rem;border-radius:24%;margin-bottom:8px}
 .lockbox{width:100%;max-width:22rem;text-align:center}
 .lk-title{font-size:1.25rem;font-weight:700}
 .lk-sub{color:var(--mute);font-size:.9rem;min-height:1.4em}
@@ -108,7 +116,6 @@ body[data-simple="1"] nav{display:none}
 .ib[aria-pressed=true]{border-color:var(--brand)}
 .row[data-swipe]{position:relative;overflow:hidden}
 .row[data-swipe]>*{position:relative;z-index:1}
-.row[data-swipe]>svg.spark{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
 .row[data-swipe]{touch-action:pan-y;user-select:none;-webkit-user-select:none}
 .row.past{background:var(--ocr);margin:0 -14px;padding-left:14px;padding-right:14px;width:calc(100% + 28px)}
 .pos{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:4px;font-size:.85rem;color:var(--mute);white-space:nowrap}
@@ -192,7 +199,7 @@ th:first-child,td:first-child{text-align:left}
 #print{display:none}
 @media print{
   @page{size:A4 landscape;margin:12mm}
-  header,nav,main,#fab,#toast,#sheet,#lock,#modal,#crop{display:none!important}
+  header,nav,main,#fab,#toast,#sheet,#lock,#modal,#crop,#install{display:none!important}
   body{background:#fff;color:#000}
   #print{display:block;font-size:11px}
   #print h1{font-size:16px;margin:0 0 2px}
@@ -205,7 +212,7 @@ th:first-child,td:first-child{text-align:left}
 </head>
 <body>
 <header>
-  <h1>🩸 BloodLog</h1>
+  <h1><img src="icons/icon-192.png" alt="" class="logo">bobolog</h1>
   <button id="fontBtn" data-act="font" aria-label="เปลี่ยนขนาดตัวอักษร">ก+</button>
   <select id="profileSel" aria-label="โปรไฟล์"></select>
 </header>
@@ -223,6 +230,7 @@ th:first-child,td:first-child{text-align:left}
   <button class="btn block" data-act="newBody">📏 วัดร่างกาย<div class="mute">ความดัน ชีพจร น้ำตาลปลายนิ้ว น้ำหนัก สัดส่วน</div></button>
   <button class="btn block" data-act="closeSheet">ยกเลิก</button>
 </div></div>
+<div id="install" hidden></div>
 <div id="crop" hidden></div>
 <div id="lock" hidden></div>
 <div id="modal" hidden></div>

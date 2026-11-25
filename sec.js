@@ -1,4 +1,4 @@
-/* BloodLog — ความปลอดภัย: เข้ารหัสข้อมูลในเครื่อง, ปลดล็อกด้วย PIN หรือลายนิ้วมือ/Face ID, เข้ารหัสไฟล์สำรอง
+/* bobolog — ความปลอดภัย: เข้ารหัสข้อมูลในเครื่อง, ปลดล็อกด้วย PIN หรือลายนิ้วมือ/Face ID, เข้ารหัสไฟล์สำรอง
  *
  * โครงสร้างกุญแจ
  *   DEK  = กุญแจ AES-256-GCM สุ่ม ใช้เข้ารหัสข้อมูลทั้งหมด (อยู่ในหน่วยความจำเฉพาะตอนปลดล็อกแล้ว)
@@ -75,8 +75,8 @@ const Sec = (() => {
       if (!window.PublicKeyCredential || !navigator.credentials) throw new Error('nosupport');
       const salt = rand(32);
       const cred = await navigator.credentials.create({ publicKey: {
-        challenge: rand(32), rp: { name: 'BloodLog' },
-        user: { id: rand(16), name: 'bloodlog', displayName: 'BloodLog' },
+        challenge: rand(32), rp: { name: 'bobolog' },
+        user: { id: rand(16), name: 'bobolog', displayName: 'bobolog' },
         pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
         authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
         timeout: 60000, extensions: { prf: { eval: { first: salt } } },
@@ -121,6 +121,7 @@ const PinPad = (() => {
   function draw() {
     const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', opt.bio ? 'bio' : '', '0', 'del'];
     el().innerHTML = `<div class="lockbox" role="dialog" aria-modal="true" aria-label="${esc(opt.title)}">
+      <img src="icons/icon-192.png" alt="" class="logo-lg">
       <div class="lk-title">🔒 ${esc(opt.title)}</div>
       <div class="lk-sub">${esc(opt.sub || '')}</div>
       <div class="dots" aria-label="ใส่แล้ว ${buf.length} หลัก">${'●'.repeat(buf.length) || '<span class="mute">– – – – – –</span>'}</div>

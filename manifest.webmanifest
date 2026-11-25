@@ -1,13 +1,13 @@
 {
-  "name": "BloodLog — บันทึกผลตรวจเลือด",
-  "short_name": "BloodLog",
+  "name": "bobolog — บันทึกผลตรวจเลือดและสุขภาพ",
+  "short_name": "bobolog",
   "description": "เก็บผลตรวจเลือดย้อนหลัง ดูแนวโน้ม ข้อมูลอยู่ในเครื่องเท่านั้น",
   "lang": "th",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#f6f4f2",
+  "background_color": "#fff0ec",
   "theme_color": "#b3261e",
   "icons": [
     {

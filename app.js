@@ -1,4 +1,4 @@
-/* BloodLog — แอปหลัก (vanilla JS, ไม่มี build step, ข้อมูลอยู่ใน IndexedDB ของเครื่องเท่านั้น) */
+/* bobolog (เดิมชื่อ BloodLog) — แอปหลัก (vanilla JS, ไม่มี build step, ข้อมูลอยู่ใน IndexedDB ของเครื่องเท่านั้น) */
 'use strict';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -209,7 +209,7 @@ function render(keep) {
 }
 
 function emptyState() {
-  return `<div class="empty"><div style="font-size:3rem">🩸</div><h2>ยังไม่มีข้อมูล</h2>
+  return `<div class="empty"><img src="icons/icon-192.png" alt="" style="width:5rem;height:5rem;border-radius:24%"><h2>ยังไม่มีข้อมูล</h2>
     <p>กดปุ่ม + เพื่อถ่ายรูปใบผลแล็บ หรือบันทึกความดัน น้ำหนัก น้ำตาล</p>
     <button class="btn primary" data-act="new">เริ่มบันทึกครั้งแรก</button></div>${quickBar()}`;
 }
@@ -223,11 +223,9 @@ function homeRow(t, anim) {
   const cur = s[i], prev = s[i - 1], st = statusOf(t, cur.v);
   let delta = '';
   if (prev) { const d = cur.v - prev.v; delta = d === 0 ? '→ เท่าเดิม' : `${d > 0 ? '▲' : '▼'} ${fmtNum(Math.abs(d))}`; }
-  const spark = sparkSVG(t, s.slice(Math.max(0, i - 2), i + 1));
   const pos = posHTML(t.id, i, s.length);
   return `<div role="button" tabindex="0" class="row${off ? ' past' : ''}${anim ? ' ' + anim : ''}" data-act="trend" data-id="${esc(t.id)}" data-swipe="${esc(t.id)}"
       aria-label="${esc(t.th || t.name)} ${fmtNum(cur.v)} ${esc(t.unit)} วันที่ ${fmtDate(cur.date)} ครั้งที่ ${i + 1} จาก ${s.length}">
-    ${spark}
     <span class="grow"><div>${esc(t.th || t.name)}</div><div class="mute">${t.th ? esc(t.name) + ' · ' : ''}${off ? '<b>ย้อนหลัง</b> · ' : ''}${fmtDate(cur.date)}${cur.rec.time ? ' ' + esc(cur.rec.time) : ''}${rangeText(t) ? ' · เกณฑ์ ' + esc(rangeText(t)) : ''}</div></span>
     <span class="vcol" style="text-align:right"><div class="val">${fmtNum(cur.v)} <span class="mute">${esc(t.unit)}</span></div><div class="delta">${delta}</div>${pos}</span>
     ${chip(st)}</div>`;
@@ -242,24 +240,9 @@ function bpRow(anim) {
   const pos = posHTML('bp', i, s.length);
   return `<div role="button" tabindex="0" class="row${off ? ' past' : ''}${anim ? ' ' + anim : ''}" data-act="trend" data-id="bp" data-swipe="bp"
       aria-label="ความดัน ${cur.sys} ทับ ${cur.dia} วันที่ ${fmtDate(cur.date)} ครั้งที่ ${i + 1} จาก ${s.length}">
-    ${sparkSVG(testById('sys'), s.slice(Math.max(0, i - 2), i + 1).map(x => ({ v: x.sys })))}
     <span class="grow"><div>ความดัน</div><div class="mute">${off ? '<b>ย้อนหลัง</b> · ' : ''}${fmtDate(cur.date)}${cur.time ? ' ' + esc(cur.time) : ''}${cur.n > 1 ? ` · เฉลี่ย ${cur.n} ครั้ง` : ''}${a7 && a7.n > 1 ? ` · เฉลี่ย 7 วัน ${a7.sys}/${a7.dia}` : ''}</div></span>
     <span class="vcol" style="text-align:right"><div class="val">${cur.sys}/${cur.dia} <span class="mute">mmHg</span></div><div class="delta">${delta}</div>${pos}</span>
     ${chip(bpStatus(cur.sys, cur.dia))}</div>`;
-}
-/** กราฟเส้นจาง ๆ เป็นพื้นหลังของแถว: สูงสุด 3 ครั้งล่าสุดจนถึงค่าที่กำลังแสดง (จุดขวาสุด = ค่าที่แสดง) */
-function sparkSVG(t, pts) {
-  if (pts.length < 2) return '';
-  const vs = pts.map(p => p.v), lo = Math.min(...vs), hi = Math.max(...vs), n = pts.length;
-  const x = i => 100 - 6 - (n - 1 - i) * 30;                       // ชิดขวา ห่างกันจุดละ 30%
-  const y = v => hi === lo ? 20 : 32 - (v - lo) / (hi - lo) * 24;  // ใช้ความสูง 20–80%
-  const xy = pts.map((p, i) => [x(i), +y(p.v).toFixed(1)]);
-  const line = xy.map(p => p.join(',')).join(' ');
-  const col = st => st === 'high' ? 'var(--hi)' : st === 'low' ? 'var(--lo)' : st === 'ok' ? 'var(--ok)' : 'var(--mute)';
-  return `<svg class="spark" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
-    <polygon points="${xy[0][0]},40 ${line} ${xy[n - 1][0]},40" fill="var(--mute)" opacity=".035"/>
-    <polyline points="${line}" fill="none" stroke="var(--mute)" stroke-width="1.5" opacity=".16" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
-    ${xy.map((p, i) => `<path d="M${p[0]} ${p[1]}h0" stroke="${col(statusOf(t, pts[i].v))}" stroke-width="${i === n - 1 ? 8 : 5}" opacity="${i === n - 1 ? .3 : .18}" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`).join('')}</svg>`;
 }
 function stepRow(id, dir) {          // dir +1 = เก่ากว่า, -1 = ใหม่กว่า
   const n = rowLen(id), cur = ui.off[id] || 0, next = Math.max(0, Math.min(n - 1, cur + dir));
@@ -549,7 +532,7 @@ function viewSettings() {
       <p class="mute" style="margin-bottom:0">แอปล็อกเองเมื่อปิดหรือสลับไปแอปอื่นเกิน 2 นาที · ถ้าลืม PIN จะเปิดข้อมูลไม่ได้ ต้องกู้คืนจากไฟล์สำรอง</p>`
     : `<p style="margin-top:0">🔓 ยังไม่ได้ล็อก — ใครเปิดเครื่องได้ก็เห็นข้อมูล และข้อมูลในเครื่องยังไม่ได้เข้ารหัส</p>
       <button class="btn primary block" data-act="secEnable">ตั้ง PIN เพื่อล็อกและเข้ารหัสข้อมูล</button>`;
-  return `<h2>ความปลอดภัย</h2><div class="card">${sec}</div>
+  return `${Install.standalone() ? '' : '<button class="btn block" data-act="install" style="margin:0 0 12px">📲 ติดตั้งเป็นแอปบนมือถือ</button>'}<h2>ความปลอดภัย</h2><div class="card">${sec}</div>
     <h2>โหมดผู้สูงอายุ</h2><div class="card"><p class="mute" style="margin-top:0">หน้าแรกเหลือ 3 ปุ่มใหญ่ (ความดัน น้ำหนัก น้ำตาล) กับค่าล่าสุด ซ่อนเมนูอื่นทั้งหมด ผู้ดูแลกดปุ่ม "สำหรับผู้ดูแล" ที่ท้ายหน้าเพื่อกลับมาตั้งค่าได้</p>
       <button class="btn block${S.simple ? '' : ' primary'}" data-act="simpleToggle" style="margin-top:0">${S.simple ? 'ปิดโหมดผู้สูงอายุ' : 'เปิดโหมดผู้สูงอายุ'}</button>
       ${S.simple ? '<button class="btn primary block" data-act="backSimple">‹ กลับสู่หน้าจอแบบง่าย</button>' : ''}</div>
@@ -574,8 +557,8 @@ function viewSettings() {
     <h2>รายการวัดร่างกายและเกณฑ์</h2><div class="card">${testList('body')}</div>
     <h2>รายการตรวจเลือดและช่วงค่าอ้างอิง</h2><div class="card">${testList('lab')}
       <button class="btn block" data-act="addTest">+ เพิ่มรายการเอง</button></div>
-    <p class="mute">เกณฑ์ที่แสดงเป็นของโปรไฟล์ปัจจุบัน${prof().sex ? ` (เพศ${SEX_TH[prof().sex]})` : ''} · BloodLog ใช้เพื่อบันทึกและติดตามเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์ · OCR โดย Tesseract.js (Apache-2.0)</p>
-    <p class="ver">BloodLog ${esc(typeof APP_VERSION === 'string' ? APP_VERSION : '')}</p>`;
+    <p class="mute">เกณฑ์ที่แสดงเป็นของโปรไฟล์ปัจจุบัน${prof().sex ? ` (เพศ${SEX_TH[prof().sex]})` : ''} · bobolog ใช้เพื่อบันทึกและติดตามเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์ · OCR โดย Tesseract.js (Apache-2.0)</p>
+    <p class="ver">bobolog ${esc(typeof APP_VERSION === 'string' ? APP_VERSION : '')}</p>`;
 }
 
 function viewProf() {
@@ -753,7 +736,7 @@ const actions = {
     if (pw === '' && !confirm('ไฟล์สำรองจะไม่ถูกเข้ารหัส ใครได้ไฟล์ไปก็เปิดอ่านข้อมูลสุขภาพได้ ต้องการสำรองแบบไม่เข้ารหัส?')) return;
     const payload = { app: 'bloodlog', exportedAt: new Date().toISOString(), ...S };
     const text = pw ? await Sec.packBackup(payload, pw) : JSON.stringify(payload, null, 2);
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = `bloodlog-backup-${today()}${pw ? '-encrypted' : ''}.json`;
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = `bobolog-backup-${today()}${pw ? '-encrypted' : ''}.json`;
     noLockUntil = Date.now() + 5 * 60e3;
     document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     S.lastBackup = today(); S.backupSnooze = null; await save(); render(true);
@@ -797,6 +780,7 @@ const actions = {
     catch (e) { toast(e && (e.message === 'noprf' || e.message === 'nosupport') ? 'เครื่องหรือเบราว์เซอร์นี้ยังไม่รองรับการปลดล็อกแบบนี้ ใช้ PIN ได้ตามปกติ' : 'ยังไม่ได้เปิดใช้ (ยกเลิกหรือสแกนไม่สำเร็จ)'); }
   },
   secLock: () => lockNow(),
+  install: () => (Install.available() ? Install.show() : toast(Install.standalone() ? 'ติดตั้งอยู่แล้ว' : 'เบราว์เซอร์นี้ติดตั้งให้ไม่ได้ ลองเปิดด้วย Chrome (Android) หรือ Safari (iPhone)')),
   import: () => { noLockUntil = Date.now() + 5 * 60e3; $('#impFile').click(); },
   pdf: printSummary,
 };
@@ -886,6 +870,45 @@ async function handleOcrFile(file) {
   if (live()) render();
 }
 
+/* ---------- ชวนติดตั้งเป็นแอปบนมือถือ ---------- */
+const Install = (() => {
+  const KEY = 'bobolog.install';            // เก็บในเครื่อง (ไม่ใช่ข้อมูลสุขภาพ): เวลาที่กด "ไว้ทีหลัง" หรือ 'done' เมื่อติดตั้งแล้ว
+  let deferred = null;                       // เหตุการณ์ beforeinstallprompt ของ Android/Chrome
+  const get = () => { try { return localStorage.getItem(KEY); } catch (e) { return null; } };
+  const set = v => { try { localStorage.setItem(KEY, v); } catch (e) { /* โหมดส่วนตัว: ไม่เป็นไร */ } };
+  const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const ios = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const el = () => $('#install');
+  const available = () => !standalone() && (!!deferred || ios());
+  function show() {
+    const how = deferred
+      ? `<p class="mute" style="margin:4px 0 12px">เปิดได้จากหน้าจอหลักเหมือนแอปทั่วไป ใช้ได้แม้ไม่มีอินเทอร์เน็ต ข้อมูลยังอยู่ในเครื่องนี้เท่านั้น</p>
+         <button class="btn primary block xl" data-ins="go">⬇️ ติดตั้งแอป</button>`
+      : `<p class="mute" style="margin:4px 0 0">บน iPhone / iPad ทำตามนี้ (ใช้เวลาไม่ถึงนาที):</p>
+         <ol><li>กดปุ่ม <b>แชร์</b> <span aria-hidden="true">(สี่เหลี่ยมมีลูกศรชี้ขึ้น)</span> ที่แถบของเบราว์เซอร์</li><li>เลื่อนลงแล้วเลือก <b>"เพิ่มไปยังหน้าจอโฮม"</b></li><li>กด <b>"เพิ่ม"</b> — ไอคอนผีน้อยสีแดงจะไปอยู่บนหน้าจอหลัก</li></ol>`;
+    el().innerHTML = `<div class="card" role="dialog" aria-modal="true" aria-label="ติดตั้ง bobolog ลงมือถือ">
+      <div class="ihead"><img src="icons/icon-192.png" alt=""><div><b style="font-size:1.15rem">ติดตั้ง bobolog ลงมือถือ</b><div class="mute">ไม่ต้องผ่านร้านค้าแอป</div></div></div>
+      ${how}<button class="btn block" data-ins="later">ไว้ทีหลัง</button></div>`;
+    el().hidden = false;
+  }
+  function hide() { el().hidden = true; el().innerHTML = ''; }
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; maybe(); });
+  window.addEventListener('appinstalled', () => { set('done'); deferred = null; hide(); toast('ติดตั้ง bobolog แล้ว เปิดได้จากหน้าจอหลัก'); });
+  document.addEventListener('click', async e => {
+    const b = e.target.closest('[data-ins]'); if (!b && e.target !== el()) return;
+    if (!b || b.dataset.ins === 'later') { set(String(Date.now())); return hide(); }      // แตะนอกกล่อง = ไว้ทีหลัง
+    if (deferred) { hide(); const ev = deferred; deferred = null; ev.prompt(); const r = await ev.userChoice.catch(() => null); if (!r || r.outcome !== 'accepted') set(String(Date.now())); }
+  });
+  /** ขึ้นเองเมื่อเหมาะสม: ยังไม่ได้ติดตั้ง, ปลดล็อกแล้ว, อยู่หน้าแรก, และไม่ได้กด "ไว้ทีหลัง" ภายใน 14 วัน */
+  function maybe() {
+    const v = get();
+    if (!S || !available() || v === 'done' || (v && Date.now() - +v < 14 * 864e5)) return;
+    if (ui.tab !== 'home' || !el().hidden || PinPad.open || !$('#crop').hidden || !$('#modal').hidden) return;
+    show();
+  }
+  return { maybe, show, available, standalone };
+})();
+
 /* ---------- ล็อก / ปลดล็อก ---------- */
 let vault = null;                    // ข้อมูลที่เข้ารหัสไว้ (มีค่าเฉพาะตอนล็อกอยู่)
 let lockFails = 0, hiddenAt = 0, noLockUntil = 0;
@@ -907,7 +930,7 @@ async function verifyPin() {
 async function unlockFlow() {
   document.body.dataset.locked = 1; document.documentElement.dataset.font = vault.font || 0;
   for (let msg = ''; ;) {
-    const r = await PinPad.ask({ title: 'ใส่ PIN เพื่อเปิด BloodLog', sub: Sec.hasBio ? 'หรือแตะปุ่มลายนิ้วมือ / Face ID' : '', bio: Sec.hasBio, forgot: true, msg });
+    const r = await PinPad.ask({ title: 'ใส่ PIN เพื่อเปิด bobolog', sub: Sec.hasBio ? 'หรือแตะปุ่มลายนิ้วมือ / Face ID' : '', bio: Sec.hasBio, forgot: true, msg });
     if (r && r.forgot) {
       if (confirm('ถ้าลืม PIN ไม่มีทางเปิดข้อมูลเดิมได้\n\nทางเดียวคือลบข้อมูลในเครื่องนี้ทั้งหมด แล้วกู้คืนจากไฟล์สำรอง (ถ้ามี)\n\nต้องการลบข้อมูลทั้งหมดในเครื่องนี้?') && confirm('ยืนยันอีกครั้ง: ลบข้อมูลทั้งหมดในเครื่องนี้ถาวร?')) { await Store.del('state'); location.reload(); return new Promise(() => {}); }
       msg = ''; continue;
@@ -932,7 +955,7 @@ async function lockNow() {
   S = null; Sec.lock();
   ui = { tab: 'home', trendTest: null, draft: null, hist: 'all', off: {} };
   $('#view').innerHTML = ''; $('#print').innerHTML = '';                 // ไม่ทิ้งข้อมูลไว้ในหน้าเว็บตอนล็อก
-  for (const id of ['crop', 'modal', 'sheet']) { $('#' + id).hidden = true; if (id !== 'sheet') $('#' + id).innerHTML = ''; }
+  for (const id of ['crop', 'modal', 'sheet', 'install']) { $('#' + id).hidden = true; if (id !== 'sheet') $('#' + id).innerHTML = ''; }
   await unlockFlow(); render();
 }
 document.addEventListener('visibilitychange', () => {
@@ -1027,4 +1050,5 @@ document.addEventListener('change', async e => {
   const q = new URLSearchParams(location.search).get('quick');     // จากทางลัดกดค้างที่ไอคอนแอป
   if (QUICK[q]) { history.replaceState(null, '', location.pathname); newDraft(null, 'body', q); }
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  setTimeout(() => Install.maybe(), 1500);
 })();

@@ -1,6 +1,6 @@
-/* BloodLog service worker — เลขเวอร์ชันอยู่ใน version.js (แก้ที่นั่นทุกครั้งที่อัปเดตไฟล์แอป) */
+/* bobolog service worker — เลขเวอร์ชันอยู่ใน version.js (แก้ที่นั่นทุกครั้งที่อัปเดตไฟล์แอป) */
 importScripts('version.js');            // ได้ค่า APP_VERSION — เบราว์เซอร์ตรวจไฟล์นี้ด้วยเวลาเช็กอัปเดต
-const VERSION = 'bloodlog-' + APP_VERSION;
+const VERSION = 'bloodlog-' + APP_VERSION;       // คำนำหน้าแคชคงเป็น bloodlog (ชื่อเดิมของแอป) — เปลี่ยนแล้วไม่ได้ประโยชน์
 const SHELL = ['./', 'index.html', 'version.js', 'app.js', 'parser.js', 'sec.js', 'ocrtools.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 // ไฟล์ OCR ขนาดใหญ่: พยายามเก็บล่วงหน้า แต่ไม่ให้การติดตั้งล้มเหลวถ้าโหลดไม่ครบ
 const OCR = ['vendor/tesseract/tesseract.min.js', 'vendor/tesseract/worker.min.js', 'vendor/tesseract/lang/eng.traineddata.gz', 'vendor/tesseract/lang/tha.traineddata.gz',
