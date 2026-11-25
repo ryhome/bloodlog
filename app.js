@@ -54,6 +54,7 @@ function normalize(s) {
     else delete t.bySex;
     if (typeof t.th === 'string' && t.th) t.th = t.th.slice(0, 80); else delete t.th;
     t.pin = !!t.pin; t.hidden = !!t.hidden; t.custom = !!t.custom;
+    if (!['none', 'thy', 'hrt', 'sug', 'kid', 'liv', 'bld', 'shp', 'bon'].includes(t.organ)) delete t.organ;
   }
   for (const p of s.profiles) { p.name = str(p.name, 60).trim() || 'ไม่มีชื่อ'; p.sex = ['m', 'f'].includes(p.sex) ? p.sex : ''; p.dob = /^\d{4}-\d{2}-\d{2}$/.test(p.dob || '') ? p.dob : ''; p.height = isFinite(+p.height) && +p.height > 0 ? +p.height : null; }
   if (!s.profiles.some(p => p.id === s.activeProfile)) s.activeProfile = s.profiles[0].id;
@@ -121,7 +122,7 @@ function statusOf(t, v) {
   if (r.high != null && v > r.high) return 'high';
   return (r.low == null && r.high == null) ? '' : 'ok';
 }
-const STATUS_TH = { low: 'ต่ำ', high: 'สูง', ok: 'ปกติ', '': '' };
+const STATUS_TH = { low: 'ต่ำ', high: 'สูง', ok: 'ปกติ', watch: 'เฝ้าระวัง', '': '' };
 const chip = st => st ? `<span class="chip ${st}">${STATUS_TH[st]}</span>` : '';
 function rangeText(t) {
   const r = rng(t);
@@ -205,7 +206,7 @@ function render(keep) {
   $$('nav button').forEach(b => b.removeAttribute('aria-current'));
   const cur = $(`nav button[data-tab="${ui.tab}"]`); if (cur) cur.setAttribute('aria-current', 'page');
   $('#fab').hidden = !['home', 'history'].includes(ui.tab) || simpleActive();
-  $('#sheet').hidden = true;
+  $('#sheet').hidden = true; $('#organ').hidden = true;
   $('#view').innerHTML = ({ home: simpleActive() ? viewSimple : viewHome, history: viewHistory, trend: viewTrend, summary: viewSummary, settings: viewSettings, edit: viewEdit, test: viewTest, prof: viewProf, welcome: viewWelcome }[ui.tab])();
   window.scrollTo(0, keep ? y0 : 0);
 }
@@ -248,6 +249,7 @@ function viewHome() {
   return `${due ? `<div class="card warn"><b>ยังไม่ได้สำรองข้อมูลมา ${due} วัน</b>
       <div class="btns" style="margin-top:8px"><button class="btn primary" data-act="export">สำรองเดี๋ยวนี้</button><button class="btn" data-act="snooze">เตือนอีกใน 7 วัน</button></div></div>` : ''}
     <div class="summary one">${lastLab ? `ตรวจเลือดล่าสุด ${fmtDate(lastLab.date, true)}` : `บันทึกล่าสุด ${fmtDate(recs[recs.length - 1].date, true)}`} · ${abn.length ? `<b style="color:var(--hi)">${abn.length} ค่าที่ควรดู</b>` : '<b style="color:var(--ok)">ทุกค่าอยู่ในเกณฑ์</b>'}</div>
+    ${bodyCard()}
     ${abn.length ? `<h2>ค่าที่นอกเกณฑ์</h2><div class="card">${abn.map(i => i.html).join('')}</div>` : ''}
     ${pinned.length ? `<h2>ปักหมุด</h2><div class="card">${pinned.map(i => i.html).join('')}</div>` : ''}
     ${rest.length ? `<h2>${abn.length || pinned.length ? 'ค่าอื่น ๆ' : 'ค่าล่าสุด'}</h2>` + [...byGroup].map(([g, list]) => fold(g, g, list.length, list.map(i => i.html).join(''))).join('') : ''}
@@ -266,23 +268,104 @@ function derived() {
     if (p.sex && age != null && age >= 18) {
       const F = p.sex === 'f', k = F ? 0.7 : 0.9, a = F ? -0.241 : -0.302;                 // CKD-EPI 2021 (ไม่ใช้เชื้อชาติ), Creatinine หน่วย mg/dL
       const v = Math.round(142 * Math.min(cr.v / k, 1) ** a * Math.max(cr.v / k, 1) ** -1.2 * 0.9938 ** age * (F ? 1.012 : 1));
-      out.push({ name: 'อัตราการกรองของไต (eGFR)', sub: `สูตร CKD-EPI 2021 จาก Creatinine ${fmtNum(cr.v)} · อายุ ${age} ปี · เพศ${SEX_TH[p.sex]}`, v, unit: 'mL/min/1.73m²', st: statusOf(testById('egfr'), v), date: cr.date });
+      out.push({ organ: 'kid', name: 'อัตราการกรองของไต (eGFR)', sub: `สูตร CKD-EPI 2021 จาก Creatinine ${fmtNum(cr.v)} · อายุ ${age} ปี · เพศ${SEX_TH[p.sex]}`, v, unit: 'mL/min/1.73m²', st: statusOf(testById('egfr'), v), date: cr.date });
     } else out.push({ hint: 'ใส่เพศและวันเกิดในโปรไฟล์ เพื่อให้แอปคำนวณอัตราการกรองของไต (eGFR) จากค่า Creatinine' });
   }
   const lip = myRecords('lab').filter(r => 'chol' in r.values && 'hdl' in r.values).pop();
   if (lip) {
     const { chol, hdl, tg } = lip.values, non = chol - hdl;
-    out.push({ name: 'ไขมันที่ไม่ใช่ HDL (Non-HDL)', sub: 'คอเลสเตอรอลรวม − HDL · เกณฑ์ทั่วไป ≤ 160', v: non, unit: 'mg/dL', st: non > 160 ? 'high' : 'ok', date: lip.date });
-    if (!('ldl' in lip.values) && tg != null && tg < 400) { const v = Math.round(non - tg / 5); out.push({ name: 'ไขมันไม่ดี LDL (คำนวณ)', sub: 'สูตร Friedewald: รวม − HDL − ไตรกลีเซอไรด์/5', v, unit: 'mg/dL', st: statusOf(testById('ldl'), v), date: lip.date }); }
+    out.push({ organ: 'hrt', name: 'ไขมันที่ไม่ใช่ HDL (Non-HDL)', sub: 'คอเลสเตอรอลรวม − HDL · เกณฑ์ทั่วไป ≤ 160', v: non, unit: 'mg/dL', st: non > 160 ? 'high' : 'ok', date: lip.date });
+    if (!('ldl' in lip.values) && tg != null && tg < 400) { const v = Math.round(non - tg / 5); out.push({ organ: 'hrt', name: 'ไขมันไม่ดี LDL (คำนวณ)', sub: 'สูตร Friedewald: รวม − HDL − ไตรกลีเซอไรด์/5', v, unit: 'mg/dL', st: statusOf(testById('ldl'), v), date: lip.date }); }
   }
   const w = last('waist');
-  if (w && p.height) { const v = +(w.v / p.height).toFixed(2); out.push({ name: 'รอบเอวต่อส่วนสูง', sub: 'เกณฑ์ < 0.5 (รอบเอวไม่ควรเกินครึ่งของส่วนสูง)', v, unit: '', st: v >= 0.5 ? 'high' : 'ok', date: w.date }); }
+  if (w && p.height) { const v = +(w.v / p.height).toFixed(2); out.push({ organ: 'shp', name: 'รอบเอวต่อส่วนสูง', sub: 'เกณฑ์ < 0.5 (รอบเอวไม่ควรเกินครึ่งของส่วนสูง)', v, unit: '', st: v >= 0.5 ? 'high' : 'ok', date: w.date }); }
   const wh = myRecords('body').filter(r => 'waist' in r.values && r.values.hip > 0).pop();
   if (wh) {
     const v = +(wh.values.waist / wh.values.hip).toFixed(2), lim = p.sex === 'm' ? 0.9 : p.sex === 'f' ? 0.85 : null;
-    out.push({ name: 'รอบเอวต่อรอบสะโพก', sub: lim ? `เกณฑ์ < ${lim} (เพศ${SEX_TH[p.sex]})` : 'ระบุเพศในโปรไฟล์เพื่อดูเกณฑ์', v, unit: '', st: lim ? (v >= lim ? 'high' : 'ok') : '', date: wh.date });
+    out.push({ organ: 'shp', name: 'รอบเอวต่อรอบสะโพก', sub: lim ? `เกณฑ์ < ${lim} (เพศ${SEX_TH[p.sex]})` : 'ระบุเพศในโปรไฟล์เพื่อดูเกณฑ์', v, unit: '', st: lim ? (v >= lim ? 'high' : 'ok') : '', date: wh.date });
   }
   return out;
+}
+
+/* ---------- ภาพรวมร่างกาย: จัดค่าตามระบบของร่างกาย แล้วแสดงเป็นจุดบนรูปคน ---------- */
+const SYSTEMS = [   // dot/side/y = ตำแหน่งในรูป (viewBox 350×372)
+  { id: 'thy', name: 'ไทรอยด์', dot: [175, 70], side: 'r', y: 50, ids: ['tsh', 'ft4', 'ft3'] },
+  { id: 'hrt', name: 'หัวใจ', full: 'หัวใจและหลอดเลือด', dot: [188, 112], side: 'r', y: 104, ids: ['sys', 'dia', 'hr', 'chol', 'tg', 'hdl', 'ldl'] },
+  { id: 'sug', name: 'น้ำตาล', dot: [183, 154], side: 'r', y: 158, ids: ['glu', 'hba1c', 'dtx_f', 'dtx_pp'] },
+  { id: 'kid', name: 'ไต', dot: [196, 184], side: 'r', y: 212, ids: ['bun', 'cr', 'egfr', 'uric'] },
+  { id: 'liv', name: 'ตับ', dot: [158, 142], side: 'l', y: 104, ids: ['ast', 'alt', 'alp', 'tbil', 'dbil', 'alb', 'tp', 'glob', 'ggt'] },
+  { id: 'bld', name: 'เลือด', dot: [111, 172], side: 'l', y: 158, ids: ['hb', 'hct', 'wbc', 'rbc', 'plt', 'mcv'] },
+  { id: 'shp', name: 'รูปร่าง', dot: [157, 206], side: 'l', y: 212, ids: ['weight', 'bmi', 'fat', 'chest', 'waist', 'hip'] },
+  { id: 'bon', name: 'กระดูก', dot: [154, 300], side: 'l', y: 280, ids: ['vitd', 'ca'] },
+];
+/** ระบบของรายการ: ที่ผู้ใช้เลือกเอง > รายการมาตรฐาน > รายการที่เพิ่มเองซึ่งตั้งชื่อหมวดตรงกับระบบ */
+function organOf(t) {
+  if (t.organ === 'none') return null;
+  if (SYSTEMS.some(s => s.id === t.organ)) return t.organ;
+  const s = SYSTEMS.find(s => s.ids.includes(t.id)) || (t.custom && SYSTEMS.find(s => t.group.includes(s.name)));
+  return s ? s.id : null;
+}
+/** ค่ายังอยู่ในเกณฑ์แต่ควรเฝ้าระวัง: อยู่ใกล้ขอบเกณฑ์ (ไม่เกิน 10%) หรือขยับเข้าหาขอบต่อเนื่อง 3 ครั้ง — vals เรียงเก่า→ใหม่ */
+function watchOf(t, vals) {
+  const r = rng(t), v = vals[vals.length - 1], both = r.low != null && r.high != null;
+  const w = b => (both ? r.high - r.low : Math.abs(b)) * 0.1;
+  if (r.high != null && r.high - v <= w(r.high)) return 'ใกล้เกณฑ์สูงสุด';
+  if (r.low != null && v - r.low <= w(r.low)) return 'ใกล้เกณฑ์ต่ำสุด';
+  if (vals.length >= 3) {
+    const [a, b, c] = vals.slice(-3), mid = both ? (r.low + r.high) / 2 : null;
+    if (r.high != null && a < b && b < c && (both ? c > mid : c >= r.high * 0.75)) return 'สูงขึ้นต่อเนื่อง 3 ครั้ง';
+    if (r.low != null && a > b && b > c && (both ? c < mid : c <= r.low * 1.25)) return 'ลดลงต่อเนื่อง 3 ครั้ง';
+  }
+  return '';
+}
+function sysData() {
+  const bp = bpSessions(), dv = derived();
+  return SYSTEMS.map(s => {
+    const rows = [];
+    for (const t of S.tests) {
+      if (t.hidden || organOf(t) !== s.id) continue;
+      if (pairOf(t.id) && bp.length) {
+        if (t.id === 'sys') {
+          const L = bp[bp.length - 1], st = bpStatus(L.sys, L.dia);
+          rows.push({ id: 'bp', name: 'ความดัน', val: `${L.sys}/${L.dia}`, unit: 'mmHg', st, why: st === 'ok' ? watchOf(testById('sys'), bp.map(x => x.sys)) || watchOf(testById('dia'), bp.map(x => x.dia)) : '' });
+        }
+        if (!bpLone(t.id)) continue;
+      }
+      const ser = series(t.id); if (!ser.length) continue;
+      const v = ser[ser.length - 1].v, st = statusOf(t, v);
+      rows.push({ id: t.id, name: t.th || t.name, val: fmtNum(v), unit: t.unit, st, why: st === 'ok' ? watchOf(t, ser.map(x => x.v)) : '' });
+    }
+    for (const d of dv) if (d.organ === s.id && !d.hint) rows.push({ name: d.name, val: fmtNum(d.v), unit: d.unit, st: d.st, why: '' });
+    const bad = rows.filter(r => r.st === 'high' || r.st === 'low').length, watch = rows.some(r => r.why);
+    const lv = !rows.length ? 'na' : bad ? 'bad' : watch ? 'watch' : rows.some(r => r.st) ? 'ok' : 'na';
+    return { ...s, rows, lv, text: { na: rows.length ? 'ไม่มีเกณฑ์' : 'ยังไม่มีข้อมูล', bad: `${bad} ค่านอกเกณฑ์`, watch: 'เฝ้าระวัง', ok: 'ปกติ' }[lv] };
+  });
+}
+function bodyCard() {
+  const d = sysData(); if (d.every(s => !s.rows.length)) return '';
+  const W = 104, H = 44;
+  return `<details class="grp" data-grp="__body"${S.bodyMapClosed ? '' : ' open'}><summary><span>ภาพรวมร่างกาย</span><span class="mute">แตะจุดเพื่อดูค่า</span></summary><div class="card bm">
+    <svg viewBox="0 0 350 372" role="group" aria-label="ภาพรวมร่างกายตามระบบ">
+      <g class="fig" transform="translate(75,0)" stroke-linecap="round" aria-hidden="true"><circle cx="100" cy="36" r="25" stroke="none"/><rect x="91" y="56" width="18" height="20" stroke="none"/>
+        <path d="M58 86 Q100 70 142 86 L134 214 Q100 228 66 214 Z" stroke="none"/><line x1="52" y1="96" x2="36" y2="196" stroke-width="20"/><line x1="148" y1="96" x2="164" y2="196" stroke-width="20"/>
+        <line x1="82" y1="222" x2="79" y2="350" stroke-width="27"/><line x1="118" y1="222" x2="121" y2="350" stroke-width="27"/></g>
+      ${d.map(o => { const x = o.side === 'l' ? 0 : 350 - W;
+        return `<g data-act="organ" data-id="${o.id}" data-lv="${o.lv}" role="button" tabindex="0" aria-label="${esc(o.full || o.name)}: ${esc(o.text)}">
+          <line class="ld" x1="${o.dot[0]}" y1="${o.dot[1]}" x2="${o.side === 'l' ? W : x}" y2="${o.y + H / 2}"/><rect x="${x}" y="${o.y}" width="${W}" height="${H}" rx="10"/>
+          <text class="n" x="${x + 9}" y="${o.y + 18}">${esc(o.name)}</text><text class="st" x="${x + 9}" y="${o.y + 35}">${esc(o.text)}</text>
+          <circle cx="${o.dot[0]}" cy="${o.dot[1]}" r="16" fill="transparent"/><circle class="dot" cx="${o.dot[0]}" cy="${o.dot[1]}" r="7.5"/></g>`; }).join('')}
+    </svg>
+    <div class="bm-lg"><span data-lv="bad"><i></i>นอกเกณฑ์</span><span data-lv="watch"><i></i>เฝ้าระวัง</span><span data-lv="ok"><i></i>ปกติ</span><span data-lv="na"><i></i>ไม่มีข้อมูล</span></div></div></details>`;
+}
+function organSheet(id) {
+  const o = sysData().find(s => s.id === id); if (!o) return '';
+  const name = o.full || o.name;
+  const row = r => { const st = r.why ? 'watch' : r.st, inner = `<span class="grow"><div>${esc(r.name)}</div>${r.why ? `<div class="mute">${esc(r.why)}</div>` : ''}</span><span class="val">${r.val} <span class="mute">${esc(r.unit)}</span></span>${chip(st)}`;
+    return r.id ? `<button class="row hrow" data-act="trend" data-id="${esc(r.id)}">${inner}<span class="mute" aria-hidden="true">›</span></button>` : `<div class="row hrow">${inner}</div>`; };
+  return `<div class="card" role="dialog" aria-label="ค่าที่เกี่ยวกับ${esc(name)}"><h2 class="bm-h" data-lv="${o.lv}"><i></i>ค่าที่เกี่ยวกับ${esc(name)}</h2>
+    ${o.rows.length ? o.rows.map(row).join('') : `<p class="mute">ยังไม่มีข้อมูลของระบบนี้ — ค่าที่เกี่ยวข้อง: ${esc(S.tests.filter(t => !t.hidden && organOf(t) === id).map(t => t.th || t.name).join(', ') || '-')}</p>`}
+    ${o.lv === 'bad' || o.lv === 'watch' ? `<p class="bm-note">ค่านอกเกณฑ์ไม่ได้แปลว่า${esc(o.id === 'sug' || o.id === 'shp' || o.id === 'bld' ? 'มีโรค' : name + 'มีปัญหา')}เสมอไป ควรนำผลไปคุยกับแพทย์</p>` : ''}
+    <button class="btn block" data-act="closeOrgan">ปิด</button></div>`;
 }
 
 /** หน้าแรกแบบง่าย (โหมดผู้สูงอายุ): 3 การ์ดใหญ่ ค่าล่าสุด + ปุ่มบันทึก */
@@ -582,6 +665,7 @@ function viewTest() {
     ${isNew ? `<label for="tKind">ประเภท</label><select id="tKind"><option value="lab">ผลตรวจเลือด (แล็บ)</option><option value="body">วัดร่างกาย</option></select>` : ''}
     <label for="tGroup">หมวด</label><input id="tGroup" list="glist" value="${esc(t.group)}"><datalist id="glist">${glist.map(g => `<option value="${esc(g)}">`).join('')}</datalist>
     <label for="tUnit">หน่วย</label><input id="tUnit" value="${esc(t.unit)}">
+    <label for="tOrgan">แสดงในภาพรวมร่างกายที่</label><select id="tOrgan"><option value="">อัตโนมัติ${organOf({ ...t, organ: undefined }) ? ` (${esc(SYSTEMS.find(s => s.id === organOf({ ...t, organ: undefined })).name)})` : ' (ไม่แสดง)'}</option>${SYSTEMS.map(s => `<option value="${s.id}"${t.organ === s.id ? ' selected' : ''}>${esc(s.full || s.name)}</option>`).join('')}<option value="none"${t.organ === 'none' ? ' selected' : ''}>ไม่แสดง</option></select>
     ${t.bySex ? `<p class="mute">รายการนี้มีเกณฑ์แยกตามเพศ — ${sx ? `กำลังแก้เกณฑ์สำหรับเพศ${SEX_TH[sx]}` : 'โปรไฟล์นี้ยังไม่ระบุเพศ จึงแก้เกณฑ์ทั่วไป'}</p>` : ''}
     <div class="grid2"><div><label for="tLow">ค่าต่ำสุดปกติ</label><input id="tLow" type="number" inputmode="decimal" step="any" value="${r.low ?? ''}" placeholder="ไม่กำหนด"></div>
     <div><label for="tHigh">ค่าสูงสุดปกติ</label><input id="tHigh" type="number" inputmode="decimal" step="any" value="${r.high ?? ''}" placeholder="ไม่กำหนด"></div></div>
@@ -618,6 +702,8 @@ const actions = {
   set: id => { ui.set = id || null; ui.arrange = false; render(); },
   arrange: () => { ui.arrange = !ui.arrange; render(true); },
   closeSheet: () => { $('#sheet').hidden = true; },
+  organ: id => { const el = $('#organ'); el.innerHTML = organSheet(id); el.hidden = !el.innerHTML; },
+  closeOrgan: () => { $('#organ').hidden = true; },
   newLab: () => newDraft(null, 'lab'),
   newBody: () => newDraft(null, 'body'),
   async font(n) { S.font = n != null ? +n : ((S.font || 0) + 1) % 3; await save(); render(true); toast('ขนาดตัวอักษร: ' + FONT_TH[S.font]); },
@@ -718,6 +804,7 @@ const actions = {
     t.name = $('#tName').value.trim(); if (!t.name) return toast('กรุณาใส่ชื่อรายการ');
     if ($('#tKind')) t.kind = $('#tKind').value;
     t.group = $('#tGroup').value.trim() || 'อื่น ๆ'; t.unit = $('#tUnit').value.trim();
+    if ($('#tOrgan').value) t.organ = $('#tOrgan').value; else delete t.organ;
     const low = num($('#tLow').value), high = num($('#tHigh').value);
     if (low != null && high != null && low > high) return toast('ค่าต่ำสุดต้องไม่มากกว่าค่าสูงสุด');
     if (t.bySex && sx) t.bySex[sx] = { low, high }; else { t.low = low; t.high = high; }
@@ -977,7 +1064,7 @@ async function lockNow() {
   S = null; Sec.lock();
   ui = { tab: 'home', trendTest: null, draft: null, hist: 'all' };
   $('#view').innerHTML = ''; $('#print').innerHTML = '';                 // ไม่ทิ้งข้อมูลไว้ในหน้าเว็บตอนล็อก
-  for (const id of ['crop', 'modal', 'sheet', 'install']) { $('#' + id).hidden = true; if (id !== 'sheet') $('#' + id).innerHTML = ''; }
+  for (const id of ['crop', 'modal', 'sheet', 'install', 'organ']) { $('#' + id).hidden = true; if (id !== 'sheet') $('#' + id).innerHTML = ''; }
   await unlockFlow(); render();
 }
 document.addEventListener('visibilitychange', () => {
@@ -992,11 +1079,13 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]');
   if (b && actions[b.dataset.act]) { if (b.tagName === 'A') e.preventDefault(); return actions[b.dataset.act](b.dataset.id); }
   if (e.target.id === 'sheet') return actions.closeSheet();
+  if (e.target.id === 'organ') return actions.closeOrgan();
   const n = e.target.closest('nav button'); if (n) { ui.tab = n.dataset.tab; ui.draft = null; ui.set = null; ui.arrange = false; ui.from = null; render(); }
 });
 document.addEventListener('toggle', async e => {                      // จำว่าหมวดไหนบนหน้าภาพรวมถูกเปิด/พับไว้
   if (!S || !e.target.matches || !e.target.matches('details.grp')) return;
-  S.openGroups = $$('details.grp').filter(d => d.open).map(d => d.dataset.grp); await save();
+  if (e.target.dataset.grp === '__body') { if (!!S.bodyMapClosed === e.target.open) { S.bodyMapClosed = !e.target.open; await save(); } return; }
+  S.openGroups = $$('details.grp').filter(d => d.open && d.dataset.grp !== '__body').map(d => d.dataset.grp); await save();
 }, true);
 $('#fab').addEventListener('click', () => { if (S) actions.new(); });
 $('#profileSel').addEventListener('change', async e => { if (!S) return; S.activeProfile = e.target.value; await save(); if (['edit', 'test', 'prof'].includes(ui.tab)) ui.tab = 'home'; render(); });
