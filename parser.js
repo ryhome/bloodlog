@@ -1,0 +1,155 @@
+/* BloodLog — รายการตรวจมาตรฐาน + ตัวแปลงข้อความ OCR เป็นค่าผลตรวจ
+   ช่วงค่าอ้างอิงเป็นค่าทั่วไปของผู้ใหญ่ แต่ละแล็บ/เพศอาจต่างกัน — แก้ได้ในหน้าตั้งค่า */
+'use strict';
+
+const DEFAULT_TESTS = [
+  // น้ำตาล
+  {id:'glu',   group:'น้ำตาล', name:'Glucose (FBS)', unit:'mg/dL', low:70, high:99, aliases:['fasting blood sugar','fasting plasma glucose','fasting glucose','glucose','fbs','fpg']},
+  {id:'hba1c', group:'น้ำตาล', name:'HbA1c', unit:'%', low:null, high:5.6, aliases:['hemoglobin a1c','haemoglobin a1c','hba1c','hb a1c','a1c','hbalc','hbaic','hba1e']},
+  // ไขมัน
+  {id:'chol',  group:'ไขมัน', name:'Total Cholesterol', unit:'mg/dL', low:null, high:200, aliases:['total cholesterol','cholesterol total','cholesterol','chol']},
+  {id:'tg',    group:'ไขมัน', name:'Triglyceride', unit:'mg/dL', low:null, high:150, aliases:['triglycerides','triglyceride','trig','tg']},
+  {id:'hdl',   group:'ไขมัน', name:'HDL-C', unit:'mg/dL', low:40, high:null, aliases:['hdl cholesterol','hdl-cholesterol','hdl-c','hdl']},
+  {id:'ldl',   group:'ไขมัน', name:'LDL-C', unit:'mg/dL', low:null, high:130, aliases:['ldl cholesterol','ldl-cholesterol','ldl-c','ldl']},
+  // ไต
+  {id:'bun',   group:'ไต', name:'BUN', unit:'mg/dL', low:7, high:20, aliases:['blood urea nitrogen','bun']},
+  {id:'cr',    group:'ไต', name:'Creatinine', unit:'mg/dL', low:0.6, high:1.2, aliases:['creatinine','creat']},
+  {id:'egfr',  group:'ไต', name:'eGFR', unit:'mL/min/1.73m²', low:90, high:null, aliases:['egfr','gfr']},
+  {id:'uric',  group:'ไต', name:'Uric acid', unit:'mg/dL', low:3.4, high:7.0, aliases:['uric acid','uric']},
+  // ตับ
+  {id:'ast',   group:'ตับ', name:'AST (SGOT)', unit:'U/L', low:null, high:40, aliases:['sgot','ast']},
+  {id:'alt',   group:'ตับ', name:'ALT (SGPT)', unit:'U/L', low:null, high:41, aliases:['sgpt','alt']},
+  {id:'alp',   group:'ตับ', name:'ALP', unit:'U/L', low:40, high:129, aliases:['alkaline phosphatase','alk phos','alp']},
+  {id:'tbil',  group:'ตับ', name:'Total Bilirubin', unit:'mg/dL', low:0.2, high:1.2, aliases:['total bilirubin','bilirubin total','bilirubin']},
+  {id:'dbil',  group:'ตับ', name:'Direct Bilirubin', unit:'mg/dL', low:null, high:0.3, aliases:['direct bilirubin','bilirubin direct']},
+  {id:'alb',   group:'ตับ', name:'Albumin', unit:'g/dL', low:3.5, high:5.2, aliases:['albumin']},
+  // CBC
+  {id:'hb',    group:'ความสมบูรณ์ของเม็ดเลือด (CBC)', name:'Hemoglobin', unit:'g/dL', low:12, high:17.5, aliases:['hemoglobin','haemoglobin','hgb','hb']},
+  {id:'hct',   group:'ความสมบูรณ์ของเม็ดเลือด (CBC)', name:'Hematocrit', unit:'%', low:36, high:52, aliases:['hematocrit','haematocrit','hct']},
+  {id:'wbc',   group:'ความสมบูรณ์ของเม็ดเลือด (CBC)', name:'WBC', unit:'10³/µL', low:4, high:10, aliases:['white blood cell','wbc count','wbc']},
+  {id:'rbc',   group:'ความสมบูรณ์ของเม็ดเลือด (CBC)', name:'RBC', unit:'10⁶/µL', low:4, high:6, aliases:['red blood cell','rbc count','rbc']},
+  {id:'plt',   group:'ความสมบูรณ์ของเม็ดเลือด (CBC)', name:'Platelet', unit:'10³/µL', low:150, high:450, aliases:['platelet count','platelets','platelet','plt']},
+  {id:'mcv',   group:'ความสมบูรณ์ของเม็ดเลือด (CBC)', name:'MCV', unit:'fL', low:80, high:100, aliases:['mcv']},
+  // ไทรอยด์ / อื่น ๆ
+  {id:'tsh',   group:'ไทรอยด์', name:'TSH', unit:'mIU/L', low:0.4, high:4.0, aliases:['tsh']},
+  {id:'ft4',   group:'ไทรอยด์', name:'Free T4', unit:'ng/dL', low:0.8, high:1.8, aliases:['free t4','ft4']},
+  {id:'ft3',   group:'ไทรอยด์', name:'Free T3', unit:'pg/mL', low:2.0, high:4.4, aliases:['free t3','ft3']},
+  {id:'vitd',  group:'อื่น ๆ', name:'Vitamin D (25-OH)', unit:'ng/mL', low:30, high:100, aliases:['vitamin d','vit d','25-oh','25 oh']},
+];
+
+// รายการวัดร่างกาย (kind:'body') — บันทึกเองได้บ่อย ๆ แยกจากผลแล็บ
+const BODY_TESTS = [
+  {id:'sys',    kind:'body', group:'ความดันและชีพจร', name:'ความดันตัวบน (SYS)', unit:'mmHg', low:90, high:129, aliases:[]},
+  {id:'dia',    kind:'body', group:'ความดันและชีพจร', name:'ความดันตัวล่าง (DIA)', unit:'mmHg', low:60, high:84, aliases:[]},
+  {id:'hr',     kind:'body', group:'ความดันและชีพจร', name:'ชีพจร / อัตราการเต้นหัวใจ', unit:'ครั้ง/นาที', low:60, high:100, aliases:[]},
+  {id:'dtx_f',  kind:'body', group:'น้ำตาลปลายนิ้ว', name:'น้ำตาลก่อนอาหาร / อดอาหาร', unit:'mg/dL', low:70, high:99, aliases:[]},
+  {id:'dtx_pp', kind:'body', group:'น้ำตาลปลายนิ้ว', name:'น้ำตาลหลังอาหาร 2 ชม.', unit:'mg/dL', low:70, high:139, aliases:[]},
+  {id:'weight', kind:'body', group:'น้ำหนักและสัดส่วน', name:'น้ำหนัก', unit:'กก.', low:null, high:null, aliases:[]},
+  {id:'bmi',    kind:'body', group:'น้ำหนักและสัดส่วน', name:'BMI', unit:'กก./ม²', low:18.5, high:22.9, aliases:[]},
+  {id:'fat',    kind:'body', group:'น้ำหนักและสัดส่วน', name:'ไขมันในร่างกาย', unit:'%', low:null, high:null, aliases:[]},
+  {id:'chest',  kind:'body', group:'น้ำหนักและสัดส่วน', name:'รอบอก', unit:'ซม.', low:null, high:null, aliases:[]},
+  {id:'waist',  kind:'body', group:'น้ำหนักและสัดส่วน', name:'รอบเอว', unit:'ซม.', low:null, high:null, aliases:[]},
+  {id:'hip',    kind:'body', group:'น้ำหนักและสัดส่วน', name:'รอบสะโพก', unit:'ซม.', low:null, high:null, aliases:[]},
+];
+DEFAULT_TESTS.unshift(...BODY_TESTS);
+
+// ช่วงอ้างอิงที่ต่างกันตามเพศ [low, high] — ใช้เมื่อโปรไฟล์ระบุเพศ
+const SEX_RANGES = {
+  hb:    { m:[13, 17.5],  f:[12, 15.5] },
+  hct:   { m:[39, 52],    f:[36, 46] },
+  rbc:   { m:[4.5, 5.9],  f:[4.0, 5.2] },
+  cr:    { m:[0.7, 1.3],  f:[0.6, 1.1] },
+  uric:  { m:[3.4, 7.0],  f:[2.4, 6.0] },
+  hdl:   { m:[40, null],  f:[50, null] },
+  waist: { m:[null, 90], f:[null, 80] },
+};
+// ชื่อเรียกภาษาไทยแบบเข้าใจง่าย (แสดงเป็นชื่อหลัก ชื่ออังกฤษตามใบแล็บแสดงเป็นบรรทัดรอง)
+const TH_NAMES = {
+  glu:'น้ำตาลในเลือด (อดอาหาร)', hba1c:'น้ำตาลสะสม', chol:'คอเลสเตอรอลรวม', tg:'ไตรกลีเซอไรด์', hdl:'ไขมันดี', ldl:'ไขมันไม่ดี',
+  bun:'ของเสียในเลือด (ไต)', cr:'ค่าการทำงานของไต', egfr:'อัตราการกรองของไต', uric:'กรดยูริก',
+  ast:'เอนไซม์ตับ AST', alt:'เอนไซม์ตับ ALT', alp:'เอนไซม์ตับ/กระดูก ALP', tbil:'บิลิรูบินรวม', dbil:'บิลิรูบินชนิดตรง', alb:'อัลบูมิน (โปรตีนในเลือด)',
+  hb:'ความเข้มข้นเลือด (ฮีโมโกลบิน)', hct:'ความเข้มข้นเลือด (ฮีมาโตคริต)', wbc:'เม็ดเลือดขาว', rbc:'เม็ดเลือดแดง', plt:'เกล็ดเลือด', mcv:'ขนาดเม็ดเลือดแดง',
+  tsh:'ฮอร์โมนกระตุ้นไทรอยด์', ft4:'ฮอร์โมนไทรอยด์ T4', ft3:'ฮอร์โมนไทรอยด์ T3', vitd:'วิตามินดี',
+};
+for (const t of DEFAULT_TESTS) {
+  if (TH_NAMES[t.id]) t.th = TH_NAMES[t.id];
+  t.kind = t.kind || 'lab';
+  const r = SEX_RANGES[t.id];
+  if (r) t.bySex = { m:{ low:r.m[0], high:r.m[1] }, f:{ low:r.f[0], high:r.f[1] } };
+}
+
+const BloodParser = (() => {
+  const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const NUM = /\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/;
+
+  function aliasRegex(alias) {
+    const body = reEsc(alias.toLowerCase()).replace(/[\s-]+|\\-/g, '[\\s\\-]*');
+    return new RegExp('(^|[^a-z0-9])(' + body + ')(?![a-z0-9])', 'i');
+  }
+
+  /** คืน { values:{testId:number}, date:'YYYY-MM-DD'|null } */
+  function parse(text, tests) {
+    const pairs = [];
+    for (const t of tests) {
+      const al = (t.aliases && t.aliases.length ? t.aliases : [t.name]).concat(t.name);
+      for (const a of new Set(al.map(x => x.toLowerCase().trim()).filter(Boolean)))
+        pairs.push({ id: t.id, len: a.length, re: aliasRegex(a) });
+    }
+    const values = {};
+    for (const raw of String(text).split(/\r?\n/)) {
+      const line = raw.replace(/[|_]/g, ' ').trim();
+      if (!line || /non[\s-]*hdl|ratio/i.test(line)) continue;
+      let best = null;
+      for (const p of pairs) {
+        const m = p.re.exec(line);
+        if (!m) continue;
+        const pos = m.index + m[1].length;
+        if (!best || pos < best.pos || (pos === best.pos && p.len > best.len))
+          best = { id: p.id, pos, len: p.len, end: m.index + m[0].length };
+      }
+      if (!best || best.id in values) continue;
+      const rest = line.slice(best.end).replace(/\([^)]*\)/g, ' ');
+      const n = NUM.exec(rest);
+      if (!n) continue;
+      const v = parseFloat(n[0].replace(/,/g, ''));
+      if (!isFinite(v)) continue;
+      // บางแล็บรายงานเป็นจำนวนเต็มต่อ µL (เช่น WBC 6,800, Platelet 265,000) แต่หน่วยในแอปคือ 10³/µL
+      values[best.id] = (best.id === 'wbc' && v >= 500) || (best.id === 'plt' && v >= 5000) ? v / 1000 : v;
+    }
+    return { values, date: parseDate(text) };
+  }
+
+  const MON = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+
+  function parseDate(text) {
+    const now = new Date();
+    const fixYear = y => {
+      y = +y;
+      if (y > 2400) return y - 543;                 // พ.ศ.
+      if (y < 100) {                                 // ปี 2 หลัก: ค.ศ. หรือ พ.ศ.
+        const cy = now.getFullYear() % 100;
+        return y <= cy + 1 ? 2000 + y : 2500 + y - 543;
+      }
+      return y;
+    };
+    const ok = (y, m, d) => {
+      const dt = new Date(y, m - 1, d);
+      if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) return null;
+      if (y < 1990 || dt.getTime() > now.getTime() + 864e5) return null;
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    };
+    // ใบแล็บมีหลายวันที่ (วันเกิด, วันเก็บตัวอย่าง, วันรายงาน): เลือกวันที่ล่าสุดที่ไม่อยู่ในอนาคต
+    let m, r; const found = [];
+    const iso = /\b(\d{4})-(\d{1,2})-(\d{1,2})\b/g;
+    while ((m = iso.exec(text))) if ((r = ok(fixYear(m[1]), +m[2], +m[3]))) found.push(r);
+    const dmy = /\b(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4}|\d{2})\b/g;
+    while ((m = dmy.exec(text))) if ((r = ok(fixYear(m[3]), +m[2], +m[1]))) found.push(r);
+    const dMy = /\b(\d{1,2})[\s\-]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?[\s\-]*(\d{4}|\d{2})\b/gi;
+    while ((m = dMy.exec(text))) if ((r = ok(fixYear(m[3]), MON[m[2].toLowerCase()], +m[1]))) found.push(r);
+    return found.length ? found.sort().pop() : null;
+  }
+
+  return { parse, parseDate };
+})();
+
+if (typeof module !== 'undefined') module.exports = { DEFAULT_TESTS, BloodParser };

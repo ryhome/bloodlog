@@ -1,0 +1,70 @@
+{
+  "name": "BloodLog — บันทึกผลตรวจเลือด",
+  "short_name": "BloodLog",
+  "description": "เก็บผลตรวจเลือดย้อนหลัง ดูแนวโน้ม ข้อมูลอยู่ในเครื่องเท่านั้น",
+  "lang": "th",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f4f2",
+  "theme_color": "#b3261e",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "บันทึกความดัน",
+      "short_name": "ความดัน",
+      "url": "./?quick=bp",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "บันทึกน้ำหนัก",
+      "short_name": "น้ำหนัก",
+      "url": "./?quick=weight",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "บันทึกน้ำตาล",
+      "short_name": "น้ำตาล",
+      "url": "./?quick=sugar",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ]
+}
