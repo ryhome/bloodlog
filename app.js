@@ -990,7 +990,16 @@ document.addEventListener('change', async e => {
 /* ---------- boot ---------- */
 (async () => {
   let stored, msg = '';
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    const hadController = !!navigator.serviceWorker.controller;      // มีเวอร์ชันเก่าคุมหน้านี้อยู่ก่อนแล้วหรือไม่
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});   // none: ตรวจ sw.js และ version.js กับเซิร์ฟเวอร์ทุกครั้ง ไม่ใช้แคช HTTP
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {      // เวอร์ชันใหม่เข้าคุมแล้ว: โหลดหน้าใหม่ให้เอง จะได้ไม่ต้องปิด-เปิดแอปสองรอบ
+      if (!hadController || reloaded) return;
+      if (S && ui.tab === 'edit') return toast('มีเวอร์ชันใหม่ — บันทึกงานนี้ก่อน แล้วปิดและเปิดแอปใหม่');   // ไม่ทิ้งข้อมูลที่กำลังกรอก
+      reloaded = true; location.reload();
+    });
+  }
   try { await Store.open(); stored = await Store.get('state'); }
   catch (e) { memOnly = true; msg = 'เบราว์เซอร์นี้เก็บข้อมูลถาวรไม่ได้ (โหมดส่วนตัว?)'; }
   if (stored && stored.vault) { vault = stored; Sec.load(stored); await unlockFlow(); }       // ข้อมูลถูกเข้ารหัส: ต้องปลดล็อกก่อน

@@ -8,8 +8,11 @@ const OCR = ['vendor/tesseract/tesseract.min.js', 'vendor/tesseract/worker.min.j
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(async c => {
-    await c.addAll(SHELL);
-    c.addAll(OCR).catch(() => {});
+    // cache:'reload' = ข้ามแคช HTTP ของเบราว์เซอร์ ไม่อย่างนั้นถ้าเครื่องเพิ่งโหลดไฟล์ชุดเก่ามาไม่กี่นาทีก่อน
+    // (GitHub Pages ให้เก็บได้ 10 นาที) แคชของเวอร์ชันใหม่จะถูกเติมด้วยไฟล์เก่า แล้วค้างอยู่อย่างนั้น
+    const fresh = list => list.map(u => new Request(u, { cache: 'reload' }));
+    await c.addAll(fresh(SHELL));
+    c.addAll(fresh(OCR)).catch(() => {});
   }).then(() => self.skipWaiting()));
 });
 
@@ -25,7 +28,7 @@ self.addEventListener('fetch', e => {
     const hit = await cache.match(req, { ignoreSearch: req.mode === 'navigate' });
     if (hit) return hit;
     try {
-      const res = await fetch(req);
+      const res = await fetch(req, { cache: 'no-cache' });   // ถามเซิร์ฟเวอร์เสมอว่าไฟล์เปลี่ยนหรือยัง
       if (res.ok) cache.put(req, res.clone());   // เก็บไฟล์ OCR core ตอนใช้ครั้งแรก
       return res;
     } catch (err) {
