@@ -145,6 +145,18 @@ const DL_TH = { good: 'ดีขึ้น', bad: 'แย่ลง', '': '' };
 const dlText = d => `${d.dir === 'up' ? 'เพิ่มขึ้น' : 'ลดลง'}จากครั้งก่อน${d.q ? ` (${DL_TH[d.q]})` : ''}`;
 const dlHTML = d => d ? `<span class="dl ${d.q}" role="img" aria-label="${dlText(d)}" title="${dlText(d)}">${d.dir === 'up' ? '▲' : '▼'}</span>` : '';
 const seriesDelta = (t, ser) => ser.length > 1 ? deltaOf(t, ser[ser.length - 2].v, ser[ser.length - 1].v) : null;
+/** แถบเกณฑ์: โซน ต่ำ / ปกติ / สูง และจุดบอกตำแหน่งของค่า — เกณฑ์สองด้าน: โซนปกติอยู่กลาง กว้างครึ่งแถบ; เกณฑ์ด้านเดียว: มีสองโซน; ค่าที่เลยปลายแถบถูกตรึงไว้ที่ปลาย */
+function rangeBar(t, v) {
+  const r = rng(t); if (r.low == null && r.high == null) return '';
+  let a, b;
+  if (r.low != null && r.high != null) { const w = r.high - r.low || Math.abs(r.high) || 1; a = r.low - w * 0.5; b = r.high + w * 0.5; }
+  else if (r.high != null) { a = r.high * 0.4; b = r.high * 1.5; } else { a = r.low * 0.5; b = r.low * 1.6; }
+  if (!(b > a)) return '';
+  const pc = x => Math.min(100, Math.max(0, (x - a) / (b - a) * 100)), st = statusOf(t, v);
+  const lo = r.low != null ? pc(r.low) : 0, hi = r.high != null ? pc(r.high) : 100, f = n => +n.toFixed(1);
+  return `<span class="rb" role="img" aria-label="ค่า ${fmtNum(v)} ${STATUS_TH[st]} · เกณฑ์ ${esc(rangeText(t))}"><span class="rb-t">${lo > 0 ? `<i class="lo" style="width:${f(lo)}%"></i>` : ''}<i class="ok" style="width:${f(hi - lo)}%"></i>${hi < 100 ? `<i class="hi" style="width:${f(100 - hi)}%"></i>` : ''}<b class="${st}" style="left:${f(Math.min(98, Math.max(2, pc(v))))}%"></b></span>
+    <span class="rb-l" aria-hidden="true">${lo > 0 ? `<em style="left:0">ต่ำ</em><span style="left:${f(lo)}%">${fmtNum(r.low)}</span>` : ''}<em class="c" style="left:${f((lo + hi) / 2)}%">ปกติ</em>${hi < 100 ? `<span style="left:${f(hi)}%">${fmtNum(r.high)}</span><em style="right:0">สูง</em>` : ''}</span></span>`;
+}
 const chip = st => st ? `<span class="chip ${st}">${STATUS_TH[st]}</span>` : '';
 function rangeText(t) {
   const r = rng(t);
@@ -355,7 +367,7 @@ function sysData() {
       }
       const ser = series(t.id); if (!ser.length) continue;
       const v = ser[ser.length - 1].v, st = statusOf(t, v);
-      rows.push({ id: t.id, name: t.th || t.name, val: fmtNum(v), unit: t.unit, st, dl: seriesDelta(t, ser), why: st === 'ok' ? watchOf(t, ser.map(x => x.v)) : '' });
+      rows.push({ id: t.id, name: t.th || t.name, val: fmtNum(v), unit: t.unit, st, dl: seriesDelta(t, ser), bar: rangeBar(t, v), why: st === 'ok' ? watchOf(t, ser.map(x => x.v)) : '' });
     }
     for (const d of dv) if (d.organ === s.id && !d.hint) rows.push({ name: d.name, val: fmtNum(d.v), unit: d.unit, st: d.st, why: '' });
     const bad = rows.filter(r => r.st === 'high' || r.st === 'low').length, watch = rows.some(r => r.why);
@@ -383,7 +395,7 @@ function organSheet(id) {
   const o = sysData().find(s => s.id === id); if (!o) return '';
   const name = o.full || o.name;
   const row = r => { const st = r.why ? 'watch' : r.st, inner = `<span class="grow"><div>${esc(r.name)}</div>${r.why ? `<div class="mute">${esc(r.why)}</div>` : ''}</span><span class="val">${dlHTML(r.dl)}${r.val} <span class="mute">${esc(r.unit)}</span></span>${chip(st)}`;
-    return r.id ? `<button class="row hrow" data-act="trend" data-id="${esc(r.id)}">${inner}<span class="mute" aria-hidden="true">›</span></button>` : `<div class="row hrow">${inner}</div>`; };
+    return r.id ? `<button class="row hrow${r.bar ? ' hasbar' : ''}" data-act="trend" data-id="${esc(r.id)}">${inner}<span class="mute" aria-hidden="true">›</span>${r.bar || ''}</button>` : `<div class="row hrow">${inner}</div>`; };
   return `<div class="card" role="dialog" aria-label="ค่าที่เกี่ยวกับ${esc(name)}"><h2 class="bm-h" data-lv="${o.lv}"><i></i>ค่าที่เกี่ยวกับ${esc(name)}</h2>
     ${o.rows.length ? o.rows.map(row).join('') : `<p class="mute">ยังไม่มีข้อมูลของระบบนี้ — ค่าที่เกี่ยวข้อง: ${esc(S.tests.filter(t => !t.hidden && organOf(t) === id).map(t => t.th || t.name).join(', ') || '-')}</p>`}
     ${o.lv === 'bad' || o.lv === 'watch' ? `<p class="bm-note">ค่านอกเกณฑ์ไม่ได้แปลว่า${esc(o.id === 'sug' || o.id === 'shp' || o.id === 'bld' ? 'มีโรค' : name + 'มีปัญหา')}เสมอไป ควรนำผลไปคุยกับแพทย์</p>` : ''}
@@ -510,7 +522,7 @@ function trendOne(t) {
   return `<div class="card big" style="margin-top:12px"><div class="bt">${esc(t.th || t.name)}</div>
       <div class="bv">${fmtNum(last.v)} <small>${esc(t.unit)}</small> ${chip(statusOf(t, last.v))}</div>
       <div class="mute">ล่าสุด ${fmtDate(last.date, true)}${rangeText(t) ? ' · เกณฑ์ ' + esc(rangeText(t)) : ''}${t.th ? ' · ' + esc(t.name) : ''}</div>
-      ${dl ? `<div class="dlline ${dl.q}">${dl.dir === 'up' ? '▲ เพิ่มขึ้น' : '▼ ลดลง'} ${fmtNum(Math.abs(last.v - s[s.length - 2].v))} จากครั้งก่อน (${fmtDate(s[s.length - 2].date)})${dl.q ? ` · <b>${DL_TH[dl.q]}</b>` : ''}</div>` : ''}</div>
+      ${dl ? `<div class="dlline ${dl.q}">${dl.dir === 'up' ? '▲ เพิ่มขึ้น' : '▼ ลดลง'} ${fmtNum(Math.abs(last.v - s[s.length - 2].v))} จากครั้งก่อน (${fmtDate(s[s.length - 2].date)})${dl.q ? ` · <b>${DL_TH[dl.q]}</b>` : ''}</div>` : ''}${rangeBar(t, last.v)}</div>
     <div class="card">${chartSVG([{ s, st: v => statusOf(t, v) }], { band: rng(t), label: t.name })}</div>
     <div class="card"><table><tr><th>วันที่</th><th>ค่า</th><th>เปลี่ยนแปลง</th><th></th></tr>${rows}</table></div>`;
 }
