@@ -123,6 +123,28 @@ function statusOf(t, v) {
   return (r.low == null && r.high == null) ? '' : 'ok';
 }
 const STATUS_TH = { low: 'ต่ำ', high: 'สูง', ok: 'ปกติ', watch: 'เฝ้าระวัง', '': '' };
+/** เทียบกับครั้งก่อน: ทิศ (ขึ้น/ลง) และผล (ดีขึ้น/แย่ลง) — ดีขึ้น = เข้าใกล้หรือกลับเข้าเกณฑ์; เกณฑ์ด้านเดียว (เช่น LDL, HDL) นับทิศที่ห่างจากขอบว่าดีขึ้น;
+    เปลี่ยนไม่ถึง 3% หรืออยู่ในเกณฑ์สองด้านทั้งสองครั้ง = ไม่ตัดสิน (ลูกศรสีเทา) */
+function deltaOf(t, prev, cur) {
+  if (prev == null || prev === cur) return null;
+  const r = rng(t), dist = v => r.high != null && v > r.high ? v - r.high : r.low != null && v < r.low ? r.low - v : 0;
+  const dir = cur > prev ? 'up' : 'down'; let q = '';
+  if (Math.abs(cur - prev) >= Math.abs(prev) * 0.03) {
+    const a = dist(prev), b = dist(cur);
+    if (b < a) q = 'good'; else if (b > a) q = 'bad';
+    else if (a === 0 && (r.low == null) !== (r.high == null)) q = (r.high != null) === (dir === 'down') ? 'good' : 'bad';
+  }
+  return { dir, q };
+}
+function bpDelta(prev, cur) {
+  if (!prev || (prev.sys === cur.sys && prev.dia === cur.dia)) return null;
+  const a = deltaOf(testById('sys'), prev.sys, cur.sys), b = deltaOf(testById('dia'), prev.dia, cur.dia), qs = [a, b].map(x => x ? x.q : '');
+  return { dir: (a || b).dir, q: qs.includes('bad') ? 'bad' : qs.includes('good') ? 'good' : '' };
+}
+const DL_TH = { good: 'ดีขึ้น', bad: 'แย่ลง', '': '' };
+const dlText = d => `${d.dir === 'up' ? 'เพิ่มขึ้น' : 'ลดลง'}จากครั้งก่อน${d.q ? ` (${DL_TH[d.q]})` : ''}`;
+const dlHTML = d => d ? `<span class="dl ${d.q}" role="img" aria-label="${dlText(d)}" title="${dlText(d)}">${d.dir === 'up' ? '▲' : '▼'}</span>` : '';
+const seriesDelta = (t, ser) => ser.length > 1 ? deltaOf(t, ser[ser.length - 2].v, ser[ser.length - 1].v) : null;
 const chip = st => st ? `<span class="chip ${st}">${STATUS_TH[st]}</span>` : '';
 function rangeText(t) {
   const r = rng(t);
@@ -218,20 +240,20 @@ function emptyState() {
 }
 
 /** แถวบนหน้าภาพรวม: บรรทัดเดียว — ชื่อ ค่า สถานะ (รายละเอียดและประวัติอยู่ในหน้าที่เปิดเมื่อแตะ) */
-const rowBtn = (id, name, val, unit, st) => `<button class="row hrow" data-act="trend" data-id="${esc(id)}" data-row="${esc(id)}">
-    <span class="grow">${esc(name)}</span><span class="val">${val} <span class="mute">${esc(unit)}</span></span>${chip(st)}<span class="mute" aria-hidden="true">›</span></button>`;
+const rowBtn = (id, name, val, unit, st, dl) => `<button class="row hrow" data-act="trend" data-id="${esc(id)}" data-row="${esc(id)}">
+    <span class="grow">${esc(name)}</span><span class="val">${dlHTML(dl)}${val} <span class="mute">${esc(unit)}</span></span>${chip(st)}<span class="mute" aria-hidden="true">›</span></button>`;
 /** รายการที่มีข้อมูลและไม่ถูกซ่อน เรียงตามหมวด (ความดันตัวบน/ล่างรวมเป็นรายการเดียว) */
 function homeItems() {
-  const out = [], bp = bpSessions().pop();
+  const out = [], bps = bpSessions(), bp = bps[bps.length - 1];
   for (const [g, tests] of groups()) for (const t of tests) {
     if (t.hidden) continue;
     if (bp && pairOf(t.id)) {
-      if (t.id === 'sys') out.push({ id: 'bp', group: g, pin: t.pin, st: bpStatus(bp.sys, bp.dia), html: rowBtn('bp', 'ความดัน', `${bp.sys}/${bp.dia}`, 'mmHg', bpStatus(bp.sys, bp.dia)) });
+      if (t.id === 'sys') out.push({ id: 'bp', group: g, pin: t.pin, st: bpStatus(bp.sys, bp.dia), html: rowBtn('bp', 'ความดัน', `${bp.sys}/${bp.dia}`, 'mmHg', bpStatus(bp.sys, bp.dia), bpDelta(bps[bps.length - 2], bp)) });
       if (!bpLone(t.id)) continue;                         // มีค่าที่กรอกมาตัวเดียว: คงแถวเดี่ยวไว้ด้วย ไม่อย่างนั้นค่านั้นจะมองไม่เห็น
     }
-    const last = series(t.id).pop(); if (!last) continue;
+    const ser = series(t.id), last = ser[ser.length - 1]; if (!last) continue;
     const st = statusOf(t, last.v);
-    out.push({ id: t.id, group: g, pin: t.pin, st, html: rowBtn(t.id, t.th || t.name, fmtNum(last.v), t.unit, st) });
+    out.push({ id: t.id, group: g, pin: t.pin, st, html: rowBtn(t.id, t.th || t.name, fmtNum(last.v), t.unit, st, seriesDelta(t, ser)) });
   }
   return out;
 }
@@ -327,13 +349,13 @@ function sysData() {
       if (pairOf(t.id) && bp.length) {
         if (t.id === 'sys') {
           const L = bp[bp.length - 1], st = bpStatus(L.sys, L.dia);
-          rows.push({ id: 'bp', name: 'ความดัน', val: `${L.sys}/${L.dia}`, unit: 'mmHg', st, why: st === 'ok' ? watchOf(testById('sys'), bp.map(x => x.sys)) || watchOf(testById('dia'), bp.map(x => x.dia)) : '' });
+          rows.push({ id: 'bp', name: 'ความดัน', val: `${L.sys}/${L.dia}`, unit: 'mmHg', st, dl: bpDelta(bp[bp.length - 2], L), why: st === 'ok' ? watchOf(testById('sys'), bp.map(x => x.sys)) || watchOf(testById('dia'), bp.map(x => x.dia)) : '' });
         }
         if (!bpLone(t.id)) continue;
       }
       const ser = series(t.id); if (!ser.length) continue;
       const v = ser[ser.length - 1].v, st = statusOf(t, v);
-      rows.push({ id: t.id, name: t.th || t.name, val: fmtNum(v), unit: t.unit, st, why: st === 'ok' ? watchOf(t, ser.map(x => x.v)) : '' });
+      rows.push({ id: t.id, name: t.th || t.name, val: fmtNum(v), unit: t.unit, st, dl: seriesDelta(t, ser), why: st === 'ok' ? watchOf(t, ser.map(x => x.v)) : '' });
     }
     for (const d of dv) if (d.organ === s.id && !d.hint) rows.push({ name: d.name, val: fmtNum(d.v), unit: d.unit, st: d.st, why: '' });
     const bad = rows.filter(r => r.st === 'high' || r.st === 'low').length, watch = rows.some(r => r.why);
@@ -360,7 +382,7 @@ function bodyCard() {
 function organSheet(id) {
   const o = sysData().find(s => s.id === id); if (!o) return '';
   const name = o.full || o.name;
-  const row = r => { const st = r.why ? 'watch' : r.st, inner = `<span class="grow"><div>${esc(r.name)}</div>${r.why ? `<div class="mute">${esc(r.why)}</div>` : ''}</span><span class="val">${r.val} <span class="mute">${esc(r.unit)}</span></span>${chip(st)}`;
+  const row = r => { const st = r.why ? 'watch' : r.st, inner = `<span class="grow"><div>${esc(r.name)}</div>${r.why ? `<div class="mute">${esc(r.why)}</div>` : ''}</span><span class="val">${dlHTML(r.dl)}${r.val} <span class="mute">${esc(r.unit)}</span></span>${chip(st)}`;
     return r.id ? `<button class="row hrow" data-act="trend" data-id="${esc(r.id)}">${inner}<span class="mute" aria-hidden="true">›</span></button>` : `<div class="row hrow">${inner}</div>`; };
   return `<div class="card" role="dialog" aria-label="ค่าที่เกี่ยวกับ${esc(name)}"><h2 class="bm-h" data-lv="${o.lv}"><i></i>ค่าที่เกี่ยวกับ${esc(name)}</h2>
     ${o.rows.length ? o.rows.map(row).join('') : `<p class="mute">ยังไม่มีข้อมูลของระบบนี้ — ค่าที่เกี่ยวข้อง: ${esc(S.tests.filter(t => !t.hidden && organOf(t) === id).map(t => t.th || t.name).join(', ') || '-')}</p>`}
@@ -482,20 +504,59 @@ function trendOne(t) {
   const s = series(t.id);
   const rows = s.slice().reverse().map((p, i, arr) => {
     const prev = arr[i + 1], d = prev ? p.v - prev.v : null;
-    return `<tr><td>${fmtDate(p.date, true)}${p.rec.time ? ` <span class="mute">${esc(p.rec.time)}</span>` : ''}</td><td><b>${fmtNum(p.v)}</b></td><td class="mute">${d == null ? '' : d === 0 ? '→' : (d > 0 ? '▲ ' : '▼ ') + fmtNum(Math.abs(d))}</td><td>${chip(statusOf(t, p.v))}</td></tr>`;
+    return `<tr><td>${fmtDate(p.date, true)}${p.rec.time ? ` <span class="mute">${esc(p.rec.time)}</span>` : ''}</td><td><b>${fmtNum(p.v)}</b></td><td class="mute">${d == null ? '' : d === 0 ? '→' : `<span class="dl ${deltaOf(t, prev.v, p.v).q}">${d > 0 ? '▲' : '▼'}</span>` + fmtNum(Math.abs(d))}</td><td>${chip(statusOf(t, p.v))}</td></tr>`;
   }).join('');
-  const last = s[s.length - 1];
+  const last = s[s.length - 1], dl = seriesDelta(t, s);
   return `<div class="card big" style="margin-top:12px"><div class="bt">${esc(t.th || t.name)}</div>
       <div class="bv">${fmtNum(last.v)} <small>${esc(t.unit)}</small> ${chip(statusOf(t, last.v))}</div>
-      <div class="mute">ล่าสุด ${fmtDate(last.date, true)}${rangeText(t) ? ' · เกณฑ์ ' + esc(rangeText(t)) : ''}${t.th ? ' · ' + esc(t.name) : ''}</div></div>
+      <div class="mute">ล่าสุด ${fmtDate(last.date, true)}${rangeText(t) ? ' · เกณฑ์ ' + esc(rangeText(t)) : ''}${t.th ? ' · ' + esc(t.name) : ''}</div>
+      ${dl ? `<div class="dlline ${dl.q}">${dl.dir === 'up' ? '▲ เพิ่มขึ้น' : '▼ ลดลง'} ${fmtNum(Math.abs(last.v - s[s.length - 2].v))} จากครั้งก่อน (${fmtDate(s[s.length - 2].date)})${dl.q ? ` · <b>${DL_TH[dl.q]}</b>` : ''}</div>` : ''}</div>
     <div class="card">${chartSVG([{ s, st: v => statusOf(t, v) }], { band: rng(t), label: t.name })}</div>
     <div class="card"><table><tr><th>วันที่</th><th>ค่า</th><th>เปลี่ยนแปลง</th><th></th></tr>${rows}</table></div>`;
+}
+/** โซนของความดันหนึ่งครั้ง: ปกติ = ตามเกณฑ์ของแอป, เริ่มสูง = เกินเกณฑ์แต่ยังไม่ถึง 140/90, สูง = ตั้งแต่ 140/90 */
+function bpZone(sys, dia) { const st = bpStatus(sys, dia); return st === 'high' ? (sys >= 140 || dia >= 90 ? 'hi' : 'pre') : st === 'low' ? 'low' : 'ok'; }
+const ZONE = { ok: { th: 'ปกติ', c: 'var(--ok)' }, pre: { th: 'เริ่มสูง', c: 'var(--wa)' }, hi: { th: 'สูง', c: 'var(--hi)' }, low: { th: 'ต่ำ', c: 'var(--lo)' } };
+/** กราฟจุด: แกนนอน = ตัวล่าง, แกนตั้ง = ตัวบน, พื้นหลังแบ่งโซน; จุดเก่าจางกว่า จุดล่าสุดใหญ่และมีตัวเลขกำกับ */
+function bpZoneSVG(all) {
+  const s = all.slice(-60), rs = rng(testById('sys')), rd = rng(testById('dia'));
+  const W = 340, H = 300, L = 40, R = 10, T = 10, B = 38;
+  const x0 = Math.min(45, ...s.map(p => p.dia - 5)), x1 = Math.max(110, ...s.map(p => p.dia + 5)), y0 = Math.min(75, ...s.map(p => p.sys - 5)), y1 = Math.max(180, ...s.map(p => p.sys + 8));
+  const X = v => L + (Math.min(Math.max(v, x0), x1) - x0) / (x1 - x0) * (W - L - R), Y = v => T + (y1 - Math.min(Math.max(v, y0), y1)) / (y1 - y0) * (H - T - B);
+  const box = (xv, yv, c, op) => `<rect x="${L}" y="${Y(yv)}" width="${X(xv) - L}" height="${H - B - Y(yv)}" fill="var(--card)"/><rect x="${L}" y="${Y(yv)}" width="${X(xv) - L}" height="${H - B - Y(yv)}" fill="${c}" opacity="${op}"/>`;
+  const sH = rs.high ?? 129, dH = rd.high ?? 84, pre = sH < 139 || dH < 89;
+  let o = `<svg class="chart bpz" viewBox="0 0 ${W} ${H}" role="img" aria-label="กราฟโซนความดัน: แกนนอนตัวล่าง แกนตั้งตัวบน">
+    <rect x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="var(--hi)" opacity=".15"/>`;
+  if (pre) o += box(Math.max(dH, 89) + .5, Math.max(sH, 139) + .5, 'var(--wa)', .22);
+  o += box(dH + .5, sH + .5, 'var(--ok)', .17);
+  if (rs.low != null && rd.low != null && rs.low > y0 && rd.low > x0) o += box(rd.low - .5, rs.low - .5, 'var(--lo)', .16);
+  for (let v = Math.ceil(y0 / 20) * 20; v <= y1; v += 20) o += `<text x="${L - 5}" y="${Y(v) + 4}" text-anchor="end">${v}</text><line x1="${L - 3}" x2="${L}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--mute)"/>`;
+  for (let v = Math.ceil(x0 / 20) * 20; v <= x1; v += 20) o += `<text x="${X(v)}" y="${H - B + 14}" text-anchor="middle">${v}</text><line x1="${X(v)}" x2="${X(v)}" y1="${H - B}" y2="${H - B + 3}" stroke="var(--mute)"/>`;
+  o += `<text x="${(L + W - R) / 2}" y="${H - 4}" text-anchor="middle">ตัวล่าง →</text><text transform="translate(11,${(T + H - B) / 2}) rotate(-90)" text-anchor="middle">ตัวบน →</text>
+    <text class="zl" x="${W - R - 6}" y="${T + 16}" text-anchor="end" fill="var(--hi)">สูง</text>
+    ${pre ? `<text class="zl" x="${L + 6}" y="${(Y(Math.max(sH, 139) + .5) + Y(sH + .5)) / 2 + 4}" fill="var(--wa)">เริ่มสูง</text>` : ''}
+    <text class="zl" x="${L + 6}" y="${Y(sH + .5) + 16}" fill="var(--ok)">ปกติ</text>`;
+  if (rs.low != null && rd.low != null && rs.low > y0 + 8 && rd.low > x0) o += `<text class="zl" x="${L + 6}" y="${H - B - 5}" fill="var(--lo)">ต่ำ</text>`;
+  s.forEach((p, i) => {
+    const last = i === s.length - 1, c = ZONE[bpZone(p.sys, p.dia)].c, cx = X(p.dia).toFixed(1), cy = Y(p.sys).toFixed(1);
+    if (last) o += `<circle cx="${cx}" cy="${cy}" r="11" fill="none" stroke="${c}" stroke-width="2" opacity=".55"/>`;
+    o += `<circle cx="${cx}" cy="${cy}" r="${last ? 6.5 : 4.5}" fill="${c}" stroke="var(--card)" stroke-width="1.5" opacity="${last ? 1 : (0.3 + 0.5 * i / s.length).toFixed(2)}"><title>${fmtDate(p.date)}: ${p.sys}/${p.dia}</title></circle>`;
+    if (last) { const right = X(p.dia) < W - 80; o += `<text class="zv" x="${+cx + (right ? 15 : -15)}" y="${+cy + 5}" text-anchor="${right ? 'start' : 'end'}">${p.sys}/${p.dia}</text>`; }
+  });
+  return o + '</svg>';
+}
+function bpZoneCard(s) {
+  const from = Date.now() - 30 * 864e5, recent = s.filter(x => x.ts >= from), n = { ok: 0, pre: 0, hi: 0, low: 0 };
+  for (const x of recent) n[bpZone(x.sys, x.dia)]++;
+  return `<div class="card"><b>ความดันอยู่โซนไหน</b><div class="mute">แต่ละจุดคือการวัดหนึ่งรอบ · จุดใหญ่มีวง = ล่าสุด · จุดจาง = เก่ากว่า</div>${bpZoneSVG(s)}
+    <div class="zsum">${recent.length ? `<span class="mute">30 วันล่าสุด:</span> ` + ['ok', 'pre', 'hi', 'low'].filter(k => n[k]).map(k => `<b style="color:${ZONE[k].c}">${ZONE[k].th} ${n[k]}</b>`).join(' · ') + ' ครั้ง' : '<span class="mute">ไม่มีการวัดใน 30 วันล่าสุด</span>'}</div></div>`;
 }
 function trendBP() {
   const s = bpSessions(), ts = testById('sys'), td = testById('dia');
   const avg = (d, label) => { const a = bpAvg(d); return `<div class="card"><b style="font-size:1.25rem">${a ? `${a.sys}/${a.dia}` : '–'}</b><span class="mute">${label}${a ? ` · ${a.n} ครั้ง` : ''}</span>${a ? '<br>' + chip(bpStatus(a.sys, a.dia)) : ''}</div>`; };
   const rows = s.slice().reverse().map(x => `<tr><td>${fmtDate(x.date, true)}${x.time ? ` <span class="mute">${esc(x.time)}</span>` : ''}</td><td><b>${x.sys}/${x.dia}</b></td><td class="mute">${x.n > 1 ? `เฉลี่ย ${x.n} ครั้ง` : ''}</td><td>${chip(bpStatus(x.sys, x.dia))}</td></tr>`).join('');
   return `<div class="summary" style="margin-top:12px">${avg(7, 'เฉลี่ย 7 วัน')}${avg(30, 'เฉลี่ย 30 วัน')}</div>
+    ${bpZoneCard(s)}
     <div class="card"><div class="mute">ความดัน · mmHg · เส้นทึบ = ตัวบน · เส้นประ = ตัวล่าง · เส้นจุดแดง = เกณฑ์สูงสุด (${rng(ts).high ?? '–'}/${rng(td).high ?? '–'})</div>
       ${chartSVG([{ s: s.map(x => ({ ts: x.ts, v: x.sys, date: x.date })), st: v => statusOf(ts, v) }, { s: s.map(x => ({ ts: x.ts, v: x.dia, date: x.date })), st: v => statusOf(td, v), dash: true }], { marks: [rng(ts).high, rng(td).high], label: 'ความดัน' })}</div>
     <div class="card"><table><tr><th>วันที่</th><th>ตัวบน/ตัวล่าง</th><th></th><th></th></tr>${rows}</table>
