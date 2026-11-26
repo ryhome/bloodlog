@@ -146,7 +146,7 @@ const dlText = d => `${d.dir === 'up' ? 'เพิ่มขึ้น' : 'ลด�
 const dlHTML = d => d ? `<span class="dl ${d.q}" role="img" aria-label="${dlText(d)}" title="${dlText(d)}">${d.dir === 'up' ? '▲' : '▼'}</span>` : '';
 const seriesDelta = (t, ser) => ser.length > 1 ? deltaOf(t, ser[ser.length - 2].v, ser[ser.length - 1].v) : null;
 /** แถบเกณฑ์: โซน ต่ำ / ปกติ / สูง และจุดบอกตำแหน่งของค่า — เกณฑ์สองด้าน: โซนปกติอยู่กลาง กว้างครึ่งแถบ; เกณฑ์ด้านเดียว: มีสองโซน; ค่าที่เลยปลายแถบถูกตรึงไว้ที่ปลาย */
-function rangeBar(t, v) {
+function rangeBar(t, v, watch) {
   const r = rng(t); if (r.low == null && r.high == null) return '';
   let a, b;
   if (r.low != null && r.high != null) { const w = r.high - r.low || Math.abs(r.high) || 1; a = r.low - w * 0.5; b = r.high + w * 0.5; }
@@ -154,7 +154,7 @@ function rangeBar(t, v) {
   if (!(b > a)) return '';
   const pc = x => Math.min(100, Math.max(0, (x - a) / (b - a) * 100)), st = statusOf(t, v);
   const lo = r.low != null ? pc(r.low) : 0, hi = r.high != null ? pc(r.high) : 100, f = n => +n.toFixed(1);
-  return `<span class="rb" role="img" aria-label="ค่า ${fmtNum(v)} ${STATUS_TH[st]} · เกณฑ์ ${esc(rangeText(t))}"><span class="rb-t">${lo > 0 ? `<i class="lo" style="width:${f(lo)}%"></i>` : ''}<i class="ok" style="width:${f(hi - lo)}%"></i>${hi < 100 ? `<i class="hi" style="width:${f(100 - hi)}%"></i>` : ''}<b class="${st}" style="left:${f(Math.min(98, Math.max(2, pc(v))))}%"></b></span>
+  return `<span class="rb" role="img" aria-label="ค่า ${fmtNum(v)} ${STATUS_TH[watch && st === 'ok' ? 'watch' : st]} · เกณฑ์ ${esc(rangeText(t))}"><span class="rb-t">${lo > 0 ? `<i class="lo" style="width:${f(lo)}%"></i>` : ''}<i class="ok" style="width:${f(hi - lo)}%"></i>${hi < 100 ? `<i class="hi" style="width:${f(100 - hi)}%"></i>` : ''}<b class="${watch && st === 'ok' ? 'watch' : st}" style="left:${f(Math.min(98, Math.max(2, pc(v))))}%"></b></span>
     <span class="rb-l" aria-hidden="true">${lo > 0 ? `<em style="left:0">ต่ำ</em><span style="left:${f(lo)}%">${fmtNum(r.low)}</span>` : ''}<em class="c" style="left:${f((lo + hi) / 2)}%">ปกติ</em>${hi < 100 ? `<span style="left:${f(hi)}%">${fmtNum(r.high)}</span><em style="right:0">สูง</em>` : ''}</span></span>`;
 }
 const chip = st => st ? `<span class="chip ${st}">${STATUS_TH[st]}</span>` : '';
@@ -366,8 +366,8 @@ function sysData() {
         if (!bpLone(t.id)) continue;
       }
       const ser = series(t.id); if (!ser.length) continue;
-      const v = ser[ser.length - 1].v, st = statusOf(t, v);
-      rows.push({ id: t.id, name: t.th || t.name, val: fmtNum(v), unit: t.unit, st, dl: seriesDelta(t, ser), bar: rangeBar(t, v), why: st === 'ok' ? watchOf(t, ser.map(x => x.v)) : '' });
+      const v = ser[ser.length - 1].v, st = statusOf(t, v), why = st === 'ok' ? watchOf(t, ser.map(x => x.v)) : '';
+      rows.push({ id: t.id, name: t.th || t.name, val: fmtNum(v), unit: t.unit, st, dl: seriesDelta(t, ser), bar: rangeBar(t, v, why), why });
     }
     for (const d of dv) if (d.organ === s.id && !d.hint) rows.push({ name: d.name, val: fmtNum(d.v), unit: d.unit, st: d.st, why: '' });
     const bad = rows.filter(r => r.st === 'high' || r.st === 'low').length, watch = rows.some(r => r.why);
@@ -518,11 +518,11 @@ function trendOne(t) {
     const prev = arr[i + 1], d = prev ? p.v - prev.v : null;
     return `<tr><td>${fmtDate(p.date, true)}${p.rec.time ? ` <span class="mute">${esc(p.rec.time)}</span>` : ''}</td><td><b>${fmtNum(p.v)}</b></td><td class="mute">${d == null ? '' : d === 0 ? '→' : `<span class="dl ${deltaOf(t, prev.v, p.v).q}">${d > 0 ? '▲' : '▼'}</span>` + fmtNum(Math.abs(d))}</td><td>${chip(statusOf(t, p.v))}</td></tr>`;
   }).join('');
-  const last = s[s.length - 1], dl = seriesDelta(t, s);
+  const last = s[s.length - 1], dl = seriesDelta(t, s), lst = statusOf(t, last.v), why = lst === 'ok' ? watchOf(t, s.map(x => x.v)) : '';
   return `<div class="card big" style="margin-top:12px"><div class="bt">${esc(t.th || t.name)}</div>
-      <div class="bv">${fmtNum(last.v)} <small>${esc(t.unit)}</small> ${chip(statusOf(t, last.v))}</div>
-      <div class="mute">ล่าสุด ${fmtDate(last.date, true)}${rangeText(t) ? ' · เกณฑ์ ' + esc(rangeText(t)) : ''}${t.th ? ' · ' + esc(t.name) : ''}</div>
-      ${dl ? `<div class="dlline ${dl.q}">${dl.dir === 'up' ? '▲ เพิ่มขึ้น' : '▼ ลดลง'} ${fmtNum(Math.abs(last.v - s[s.length - 2].v))} จากครั้งก่อน (${fmtDate(s[s.length - 2].date)})${dl.q ? ` · <b>${DL_TH[dl.q]}</b>` : ''}</div>` : ''}${rangeBar(t, last.v)}</div>
+      <div class="bv">${fmtNum(last.v)} <small>${esc(t.unit)}</small> ${chip(why ? 'watch' : lst)}</div>
+      <div class="mute">ล่าสุด ${fmtDate(last.date, true)}${rangeText(t) ? ' · เกณฑ์ ' + esc(rangeText(t)) : ''}${t.th ? ' · ' + esc(t.name) : ''}${why ? ' · ' + esc(why) : ''}</div>
+      ${dl ? `<div class="dlline ${dl.q}">${dl.dir === 'up' ? '▲ เพิ่มขึ้น' : '▼ ลดลง'} ${fmtNum(Math.abs(last.v - s[s.length - 2].v))} จากครั้งก่อน (${fmtDate(s[s.length - 2].date)})${dl.q ? ` · <b>${DL_TH[dl.q]}</b>` : ''}</div>` : ''}${rangeBar(t, last.v, why)}</div>
     <div class="card">${chartSVG([{ s, st: v => statusOf(t, v) }], { band: rng(t), label: t.name })}</div>
     <div class="card"><table><tr><th>วันที่</th><th>ค่า</th><th>เปลี่ยนแปลง</th><th></th></tr>${rows}</table></div>`;
 }
